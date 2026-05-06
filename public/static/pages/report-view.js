@@ -293,13 +293,36 @@ export class ReportViewPage {
           </h3>
           <div class="photo-grid">
             ${r.photos.map((ph, i) => `
-              <div class="relative cursor-pointer group"
-                onclick="reportViewPage._viewPhoto('${encodeURIComponent(ph.dataUrl)}','${this._esc(ph.caption||'')}')">
-                <img src="${ph.dataUrl}" class="photo-thumb" alt="${this._esc(ph.caption || 'Site photo')}" />
-                ${ph.caption ? `
-                <div class="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1
-                  rounded-b-xl text-center truncate">${this._esc(ph.caption)}</div>` : ''}
-                <div class="absolute inset-0 bg-black/0 group-hover:bg-black/10 rounded-xl transition-colors"></div>
+              <div class="flex flex-col rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-white">
+                <div class="relative cursor-pointer group"
+                  onclick="reportViewPage._viewPhoto('${encodeURIComponent(ph.dataUrl)}','${this._esc(ph.caption||ph.description||'')}')">
+                  <img src="${ph.dataUrl}" class="photo-thumb w-full" alt="${this._esc(ph.caption||ph.description||'Site photo')}" />
+                  <div class="absolute inset-0 bg-black/0 group-hover:bg-black/10 rounded-t-xl transition-colors"></div>
+                  <div class="absolute top-1.5 right-1.5 bg-black/40 rounded-lg px-1.5 py-0.5 text-white text-xs no-print">
+                    <i class="fas fa-expand-alt text-xs"></i>
+                  </div>
+                </div>
+                <!-- Description row -->
+                <div class="px-2 py-2 bg-gray-50 border-t border-gray-100 no-print" id="photo-desc-area-${i}">
+                  ${(ph.caption||ph.description) ? `
+                    <div class="flex items-start gap-1.5">
+                      <p class="flex-1 text-xs text-gray-600 leading-snug" id="photo-desc-text-${i}">${this._esc(ph.caption||ph.description)}</p>
+                      <button onclick="reportViewPage._editPhotoDesc(${i})" title="Edit description"
+                        class="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:text-brand-600 hover:bg-brand-50">
+                        <i class="fas fa-pen text-xs"></i>
+                      </button>
+                    </div>
+                  ` : `
+                    <button onclick="reportViewPage._editPhotoDesc(${i})"
+                      class="w-full flex items-center gap-1.5 text-xs text-gray-400 hover:text-brand-600 transition-colors py-0.5">
+                      <i class="fas fa-plus-circle"></i> Add description
+                    </button>
+                  `}
+                </div>
+                <!-- Description in print/PDF view only -->
+                <div class="px-2 py-1.5 bg-gray-50 border-t border-gray-100 print-only hidden">
+                  <p class="text-xs text-gray-600">${this._esc(ph.caption||ph.description||'')}</p>
+                </div>
               </div>`).join('')}
           </div>
         </div>` : ''}
@@ -376,7 +399,7 @@ export class ReportViewPage {
     overlay.innerHTML = `
       <div class="relative max-w-2xl w-full">
         <img src="${dataUrl}" class="w-full rounded-2xl shadow-2xl max-h-[80vh] object-contain" />
-        ${caption ? `<p class="text-white text-center mt-3 text-sm">${this._esc(caption)}</p>` : ''}
+        ${caption ? `<p class="text-white text-center mt-3 text-sm px-2">${this._esc(caption)}</p>` : ''}
         <button onclick="this.closest('.fixed').remove()"
           class="absolute -top-4 -right-4 w-9 h-9 bg-white rounded-full text-gray-700
             flex items-center justify-center shadow-lg hover:bg-gray-100">
@@ -385,6 +408,84 @@ export class ReportViewPage {
       </div>`
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove() })
     document.body.appendChild(overlay)
+  }
+
+  // ── Photo description editor ──────────────────────────────
+
+  _editPhotoDesc(i) {
+    const ph    = this.report.photos?.[i]
+    if (!ph) return
+    const area  = document.getElementById(`photo-desc-area-${i}`)
+    if (!area) return
+    const cur   = ph.caption || ph.description || ''
+    area.innerHTML = `
+      <div class="flex items-start gap-1.5">
+        <textarea id="photo-desc-inp-${i}" rows="2"
+          placeholder="Enter photo description…"
+          class="flex-1 text-xs rounded-lg border border-brand-400 px-2 py-1.5 resize-none
+                 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+        >${this._esc(cur)}</textarea>
+        <div class="flex flex-col gap-1">
+          <button onclick="reportViewPage._savePhotoDesc(${i})" title="Save"
+            class="w-7 h-7 flex items-center justify-center rounded-lg bg-emerald-500 text-white hover:bg-emerald-600">
+            <i class="fas fa-check text-xs"></i>
+          </button>
+          <button onclick="reportViewPage._cancelPhotoDesc(${i})" title="Cancel"
+            class="w-7 h-7 flex items-center justify-center rounded-lg bg-gray-200 text-gray-600 hover:bg-gray-300">
+            <i class="fas fa-times text-xs"></i>
+          </button>
+        </div>
+      </div>`
+    setTimeout(() => {
+      const inp = document.getElementById(`photo-desc-inp-${i}`)
+      if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length) }
+    }, 30)
+  }
+
+  async _savePhotoDesc(i) {
+    const ph  = this.report.photos?.[i]
+    if (!ph) return
+    const inp = document.getElementById(`photo-desc-inp-${i}`)
+    const val = (inp?.value || '').trim()
+    ph.caption     = val
+    ph.description = val
+    await DB.putReport(this.report)
+    // Re-render just that description area
+    const area = document.getElementById(`photo-desc-area-${i}`)
+    if (area) {
+      area.innerHTML = val ? `
+        <div class="flex items-start gap-1.5">
+          <p class="flex-1 text-xs text-gray-600 leading-snug">${this._esc(val)}</p>
+          <button onclick="reportViewPage._editPhotoDesc(${i})" title="Edit description"
+            class="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:text-brand-600 hover:bg-brand-50">
+            <i class="fas fa-pen text-xs"></i>
+          </button>
+        </div>` : `
+        <button onclick="reportViewPage._editPhotoDesc(${i})"
+          class="w-full flex items-center gap-1.5 text-xs text-gray-400 hover:text-brand-600 transition-colors py-0.5">
+          <i class="fas fa-plus-circle"></i> Add description
+        </button>`
+    }
+    showToast(val ? 'Description saved' : 'Description cleared', 'success')
+  }
+
+  _cancelPhotoDesc(i) {
+    const ph   = this.report.photos?.[i]
+    const cur  = ph?.caption || ph?.description || ''
+    const area = document.getElementById(`photo-desc-area-${i}`)
+    if (!area) return
+    area.innerHTML = cur ? `
+      <div class="flex items-start gap-1.5">
+        <p class="flex-1 text-xs text-gray-600 leading-snug">${this._esc(cur)}</p>
+        <button onclick="reportViewPage._editPhotoDesc(${i})" title="Edit description"
+          class="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:text-brand-600 hover:bg-brand-50">
+          <i class="fas fa-pen text-xs"></i>
+        </button>
+      </div>` : `
+      <button onclick="reportViewPage._editPhotoDesc(${i})"
+        class="w-full flex items-center gap-1.5 text-xs text-gray-400 hover:text-brand-600 transition-colors py-0.5">
+        <i class="fas fa-plus-circle"></i> Add description
+      </button>`
   }
 
   // ── MS Project sync ───────────────────────────────────────
@@ -603,23 +704,57 @@ export class ReportViewPage {
     if (r.photos?.length) {
       if (y > PH - 70) { doc.addPage(); y = M }
       doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(...BRAND)
-      doc.text(`SITE PHOTOS (${r.photos.length})`, M, y); y += 5
+      doc.text(`SITE PHOTOS (${r.photos.length})`, M, y); y += 6
 
-      const PW_PHOTO = 56, PH_PHOTO = 42, GAP = 4
-      let px = M, py = y
-      for (let i = 0; i < Math.min(r.photos.length, 9); i++) {
-        if (i > 0 && i % 3 === 0) { px = M; py += PH_PHOTO + 6 }
-        if (py + PH_PHOTO > PH - 20) { doc.addPage(); px = M; py = M }
+      // Layout: 3 columns, each photo + description caption below
+      const COLS = 3
+      const GAP  = 4
+      const PW_PHOTO = (CW - GAP * (COLS - 1)) / COLS   // ~59mm
+      const PH_PHOTO = Math.round(PW_PHOTO * 0.72)       // ~42mm (4:3)
+      const DESC_H   = 9   // reserved height below image for description text
+      const CELL_H   = PH_PHOTO + DESC_H + 2
+
+      let px = M, py = y, col = 0
+      for (let i = 0; i < r.photos.length; i++) {
+        // Wrap to next row
+        if (col > 0 && col % COLS === 0) {
+          px = M; py += CELL_H + GAP; col = 0
+        }
+        // New page if needed
+        if (py + CELL_H > PH - 20) { doc.addPage(); px = M; py = M; col = 0 }
+
+        const ph   = r.photos[i]
+        const desc = (ph.caption || ph.description || '').trim()
+
         try {
-          doc.addImage(r.photos[i].dataUrl, 'JPEG', px, py, PW_PHOTO, PH_PHOTO, '', 'MEDIUM')
-          if (r.photos[i].caption) {
-            doc.setFontSize(6); doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80)
-            doc.text(r.photos[i].caption, px, py + PH_PHOTO + 3, { maxWidth: PW_PHOTO })
-          }
+          doc.addImage(ph.dataUrl, 'JPEG', px, py, PW_PHOTO, PH_PHOTO, '', 'MEDIUM')
         } catch { /* skip unreadable photo */ }
+
+        // Photo number badge
+        doc.setFillColor(30, 30, 30)
+        doc.roundedRect(px + 1, py + 1, 8, 5, 1, 1, 'F')
+        doc.setFontSize(5); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255)
+        doc.text(String(i + 1), px + 5, py + 4.8, { align: 'center' })
+
+        // Description below the image
+        if (desc) {
+          doc.setFontSize(6.5); doc.setFont('helvetica','normal'); doc.setTextColor(50, 50, 50)
+          const descLines = doc.splitTextToSize(desc, PW_PHOTO)
+          // Show max 2 lines to fit within DESC_H
+          const printLines = descLines.slice(0, 2)
+          printLines.forEach((line, li) => {
+            doc.text(line, px, py + PH_PHOTO + 4 + li * 3.5)
+          })
+        } else {
+          // faint placeholder so the row height is consistent
+          doc.setFontSize(5.5); doc.setFont('helvetica','italic'); doc.setTextColor(180,180,180)
+          doc.text('No description', px, py + PH_PHOTO + 4)
+        }
+
         px += PW_PHOTO + GAP
+        col++
       }
-      y = py + PH_PHOTO + 10
+      y = py + CELL_H + 8
     }
 
     // ── SIGNATURE ────────────────────────────────────
