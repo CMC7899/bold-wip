@@ -403,10 +403,14 @@ export class ProjectNewPage {
 
       ${!msConfigured ? `
       <div class="flex items-start gap-3 p-3 bg-purple-50 border border-purple-200 rounded-xl mb-4 text-sm">
-        <i class="fas fa-magic text-purple-500 mt-0.5"></i>
-        <div>
+        <i class="fas fa-magic text-purple-500 mt-0.5 flex-shrink-0"></i>
+        <div class="flex-1 min-w-0">
           <span class="font-semibold text-purple-800">Demo Mode Active</span>
-          <div class="text-purple-600 text-xs mt-0.5">Mock GUIDs will be auto-assigned for all MS Project fields. You can configure live sync later in Settings.</div>
+          <div class="text-purple-600 text-xs mt-0.5">Mock GUIDs are auto-assigned to the project, each zone and every activity so the app is fully functional without MS Project Online.</div>
+          <div class="mt-2 bg-white border border-purple-100 rounded-lg px-3 py-2 text-xs">
+            <span class="text-purple-500 font-semibold">Project&nbsp;ID:&nbsp;</span>
+            <code class="font-mono text-gray-600 break-all">${d.id}</code>
+          </div>
         </div>
       </div>` : ''}
 
@@ -436,14 +440,17 @@ export class ProjectNewPage {
             <i class="fas fa-layer-group text-purple-500"></i> Zones (${d.zones.length})
           </h3>
           ${d.zones.length === 0
-            ? `<p class="text-red-500 text-xs flex items-center gap-1"><i class="fas fa-exclamation-circle"></i> No zones configured – required</p>`
+            ? `<p class="text-amber-600 text-xs flex items-center gap-1"><i class="fas fa-info-circle"></i> No zones added yet — you can add them after saving</p>`
             : d.zones.map(z => `
               <div class="flex items-center justify-between py-1.5 border-b border-purple-100 last:border-0">
                 <div class="flex items-center gap-2">
                   <span class="font-semibold text-purple-900 text-xs">${this._esc(z.zoneCode)}</span>
                   <span class="text-xs bg-purple-200 text-purple-800 px-1.5 py-0.5 rounded-full">${z.zoneType}</span>
                 </div>
-                <span class="text-xs text-purple-500">${(z.activities || []).length} activities</span>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-purple-500">${(z.activities || []).length} activities</span>
+                  ${!msConfigured ? `<code class="text-xs font-mono text-gray-400 hidden sm:block truncate max-w-[110px]">${z.msTaskId || ''}</code>` : ''}
+                </div>
               </div>`).join('')}
         </div>
 
@@ -470,9 +477,26 @@ export class ProjectNewPage {
                 <span class="text-emerald-600 font-semibold">✓ Configured</span> –
                 ${d.msProjectId ? `Project GUID: <code class="font-mono bg-white px-1 rounded">${d.msProjectId}</code>` : 'New project will be linked on first sync'}
                </div>`
-            : `<div class="text-xs text-amber-700">
-                <i class="fas fa-magic mr-1 text-purple-500"></i>
-                Mock GUIDs will be auto-assigned to all zones and activities.
+            : `<div class="space-y-1.5 text-xs">
+                <div class="flex items-center gap-1.5 text-purple-700">
+                  <i class="fas fa-magic text-purple-500"></i>
+                  <span class="font-semibold">Demo Mode – mock IDs auto-assigned on save</span>
+                </div>
+                <div class="grid grid-cols-1 gap-1 mt-1">
+                  <div class="flex items-center gap-2 bg-white rounded-lg px-2.5 py-1.5 border border-purple-100">
+                    <span class="text-purple-500 font-semibold w-24 flex-shrink-0">Project ID</span>
+                    <code class="font-mono text-gray-500 text-xs truncate">${d.id}</code>
+                  </div>
+                  ${d.zones.slice(0,2).map(z => `
+                  <div class="flex items-center gap-2 bg-white rounded-lg px-2.5 py-1.5 border border-purple-100">
+                    <span class="text-purple-500 font-semibold w-24 flex-shrink-0">${this._esc(z.zoneCode)}</span>
+                    <code class="font-mono text-gray-500 text-xs truncate">${z.msTaskId || '(will be generated)'}</code>
+                  </div>`).join('')}
+                  ${d.zones.length > 2 ? `<div class="text-purple-400 text-center text-xs">+${d.zones.length - 2} more zone IDs…</div>` : ''}
+                </div>
+                <p class="text-gray-400 text-xs mt-1">Configure MS Project in
+                  <button onclick="app.navTo('#/settings')" class="text-purple-600 underline font-semibold">Settings</button>
+                  to enable live sync.</p>
                </div>`}
         </div>
       </div>`
@@ -504,7 +528,10 @@ export class ProjectNewPage {
       if (!this.data.expectedEndDate) { showToast('Expected end date is required', 'error'); return false }
     }
     if (this.step === 2) {
-      if (!this.data.zones.length)  { showToast('Add at least one zone', 'error');       return false }
+      // Zones are optional – show a soft warning but do not block navigation
+      if (!this.data.zones.length) {
+        showToast('No zones added – you can still save and add zones later', 'warning')
+      }
     }
     return true
   }

@@ -893,6 +893,22 @@ export class ReportNewPage {
     // Assign mock IDs to any photo that lacks an id
     this.data.photos = this.data.photos.map(ph => ({ ...ph, id: ph.id || genId() }))
 
+    // Ensure the report itself has a stable ID
+    if (!this.data.id) this.data.id = genId()
+
+    // When MS Project is not configured, stamp every zone activity with a mock msTaskId
+    if (!isMsConfigured()) {
+      this.data.syncStatus = 'mock'
+      this.data.zoneProgress = (this.data.zoneProgress || []).map(zp => ({
+        ...zp,
+        msTaskId: zp.msTaskId || genMockGuid(),
+        activities: (zp.activities || []).map(a => ({
+          ...a,
+          msTaskId: a.msTaskId || genMockGuid(),
+        })),
+      }))
+    }
+
     try {
       await DB.putReport(this.data)
       this._clearDraft()

@@ -250,9 +250,9 @@ export class SettingsPage {
         { id: genId(), projectId: pid, type: 'MANPOWER', roleName: 'Site Supervisor',        msResourceId: genMockGuid() },
         { id: genId(), projectId: pid, type: 'MANPOWER', roleName: 'General Workers',        msResourceId: genMockGuid() },
         { id: genId(), projectId: pid, type: 'MANPOWER', roleName: 'Site Safety Supervisor', msResourceId: genMockGuid() },
-        { id: genId(), projectId: pid, type: 'MACHINERY', roleName: 'Backhoe',              msResourceId: genMockGuid() },
-        { id: genId(), projectId: pid, type: 'MACHINERY', roleName: 'Crane',                msResourceId: genMockGuid() },
-        { id: genId(), projectId: pid, type: 'MACHINERY', roleName: 'Tipper Truck',         msResourceId: genMockGuid() },
+        { id: genId(), projectId: pid, type: 'MACHINERY', roleName: 'Backhoe',      equipmentName: 'Backhoe',      msResourceId: genMockGuid() },
+        { id: genId(), projectId: pid, type: 'MACHINERY', roleName: 'Crane',          equipmentName: 'Crane',          msResourceId: genMockGuid() },
+        { id: genId(), projectId: pid, type: 'MACHINERY', roleName: 'Tipper Truck',   equipmentName: 'Tipper Truck',   msResourceId: genMockGuid() },
       ]
 
       const project = {
@@ -294,9 +294,9 @@ export class SettingsPage {
           { resourceTemplateId: resources[3].id, roleName: 'Site Safety Supervisor', quantity: 1 },
         ],
         machineryLog: [
-          { resourceTemplateId: resources[4].id, equipmentName: 'Backhoe',      quantity: 1 },
-          { resourceTemplateId: resources[5].id, equipmentName: 'Crane',        quantity: 0 },
-          { resourceTemplateId: resources[6].id, equipmentName: 'Tipper Truck', quantity: 2 },
+          { resourceTemplateId: resources[4].id, roleName: 'Backhoe',      equipmentName: 'Backhoe',      quantity: 1 },
+          { resourceTemplateId: resources[5].id, roleName: 'Crane',        equipmentName: 'Crane',        quantity: 0 },
+          { resourceTemplateId: resources[6].id, roleName: 'Tipper Truck', equipmentName: 'Tipper Truck', quantity: 2 },
         ],
         zoneProgress: zones.map((z, zi) => ({
           zoneConfigId: z.id,
