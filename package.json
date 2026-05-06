@@ -4,16 +4,20 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "wrangler pages dev",
-    "deploy": "npm run build && wrangler pages deploy",
+    "preview": "wrangler pages dev dist",
+    "dev:sandbox": "wrangler pages dev dist --ip 0.0.0.0 --port 3000",
+    "sync": "cp -r public/static/. dist/static/ && cp public/index.html dist/index.html 2>/dev/null; echo 'Synced public/static → dist/static'",
+    "deploy": "npm run build && wrangler pages deploy dist",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings"
   },
   "dependencies": {
     "hono": "^4.12.12"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260506.1",
     "@hono/vite-build": "^1.2.0",
     "@hono/vite-dev-server": "^0.18.2",
+    "typescript": "^5.9.3",
     "vite": "^6.3.5",
     "wrangler": "^4.4.0"
   }

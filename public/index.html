@@ -1,18 +1,4 @@
-import { Hono } from 'hono'
-
-const app = new Hono()
-
-// For Cloudflare Pages, static files in public/ are served automatically
-// by the platform. The worker only needs to handle API routes.
-// All non-API routes serve the SPA index.html
-
-app.get('/api/health', (c) => {
-  return c.json({ status: 'ok', timestamp: new Date().toISOString() })
-})
-
-// Fallback: return a minimal HTML that loads the SPA
-app.get('*', (c) => {
-  return c.html(`<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -20,9 +6,16 @@ app.get('*', (c) => {
   <title>Bolt Industries – Daily Progress Report</title>
   <meta name="description" content="Construction Site Daily Progress Reporting System" />
   <meta name="theme-color" content="#1e3a5f" />
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" />
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <!-- jsPDF for PDF export -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <link rel="stylesheet" href="/static/style.css" />
@@ -51,19 +44,7 @@ app.get('*', (c) => {
   </script>
 </head>
 <body class="bg-gray-50 font-sans antialiased">
-  <div id="app">
-    <div class="flex items-center justify-center min-h-screen">
-      <div class="text-center">
-        <div class="w-16 h-16 rounded-2xl bg-brand-800 flex items-center justify-center mx-auto mb-4">
-          <i class="fas fa-bolt text-yellow-400 text-2xl"></i>
-        </div>
-        <p class="text-gray-500 text-sm">Loading...</p>
-      </div>
-    </div>
-  </div>
+  <div id="app"></div>
   <script type="module" src="/static/app.js"></script>
 </body>
-</html>`)
-})
-
-export default app
+</html>
