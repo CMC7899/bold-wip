@@ -16,6 +16,8 @@ export class ProjectNewPage {
     this._expandedZone = -1
     // Track which zone is in "edit activities" mode (-1 = none)
     this._editingZone  = -1
+    // Track which zone is being renamed (-1 = none)
+    this._renamingZone = -1
 
     this.data = {
       id:                genId(),
@@ -194,7 +196,7 @@ export class ProjectNewPage {
   }
 
   // ══════════════════════════════════════════════════════════
-  // STEP 2 – Zone Configuration  (full activity editor)
+  // STEP 2 – Zone Configuration  (full zone + activity editor)
   // ══════════════════════════════════════════════════════════
 
   _step2() {
@@ -204,27 +206,32 @@ export class ProjectNewPage {
         Zone Configuration
       </h2>
       <p class="text-sm text-gray-500 mb-5">
-        Add zones, then customise each zone's activity checklist.
+        Add zones, rename them inline, and customise each zone's activity checklist.
       </p>
 
-      <!-- ── Add zone row ── -->
-      <div class="flex gap-2 mb-5">
-        <select id="zone-type-sel"
-          class="flex-1 px-3 py-2.5 rounded-xl border border-gray-200 text-sm
-                 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white">
-          <option value="BIPV">BIPV Zone (CP1–CP7)</option>
-          <option value="STANDARD">Standard Zone (CPN1–CPN8)</option>
-          <option value="CUSTOM">Custom Zone (blank activities)</option>
-        </select>
-        <input id="zone-code-inp" type="text" placeholder="Code e.g. CP1"
-          class="w-28 px-3 py-2.5 rounded-xl border border-gray-200 text-sm
-                 focus:outline-none focus:ring-2 focus:ring-brand-500 uppercase"
-          onkeydown="if(event.key==='Enter') projectNewPage._addZone()" />
-        <button onclick="projectNewPage._addZone()"
-          class="px-4 py-2.5 bg-brand-800 text-white rounded-xl text-sm font-semibold
-                 hover:bg-brand-700 whitespace-nowrap flex items-center gap-1">
-          <i class="fas fa-plus"></i><span class="hidden sm:inline">Add Zone</span>
-        </button>
+      <!-- ── Add zone panel ── -->
+      <div class="bg-gray-50 border border-gray-200 rounded-2xl p-4 mb-5">
+        <p class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">
+          <i class="fas fa-plus-circle mr-1 text-brand-500"></i>Add New Zone
+        </p>
+        <div class="flex gap-2">
+          <select id="zone-type-sel"
+            class="flex-1 px-3 py-2.5 rounded-xl border border-gray-200 text-sm
+                   focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white">
+            <option value="BIPV">BIPV Zone (CP1–CP7)</option>
+            <option value="STANDARD">Standard Zone (CPN1–CPN8)</option>
+            <option value="CUSTOM">Custom Zone (blank activities)</option>
+          </select>
+          <input id="zone-code-inp" type="text" placeholder="Code e.g. CP1"
+            class="w-32 px-3 py-2.5 rounded-xl border border-gray-200 text-sm
+                   focus:outline-none focus:ring-2 focus:ring-brand-500 uppercase"
+            onkeydown="if(event.key==='Enter') projectNewPage._addZone()" />
+          <button onclick="projectNewPage._addZone()"
+            class="px-4 py-2.5 bg-brand-800 text-white rounded-xl text-sm font-semibold
+                   hover:bg-brand-700 whitespace-nowrap flex items-center gap-1.5">
+            <i class="fas fa-plus"></i><span class="hidden sm:inline">Add Zone</span>
+          </button>
+        </div>
       </div>
 
       <!-- ── Zones list ── -->
@@ -255,57 +262,91 @@ export class ProjectNewPage {
   // ── Single zone card (header + collapsible body) ──────────
 
   _renderZoneCard(z, i) {
-    const isBIPV    = z.zoneType === 'BIPV'
-    const isCustom  = z.zoneType === 'CUSTOM'
-    const expanded  = this._expandedZone === i
-    const editing   = this._editingZone  === i
-    const actCount  = (z.activities || []).length
+    const isBIPV     = z.zoneType === 'BIPV'
+    const isCustom   = z.zoneType === 'CUSTOM'
+    const expanded   = this._expandedZone === i
+    const editing    = this._editingZone  === i
+    const renaming   = this._renamingZone === i
+    const actCount   = (z.activities || []).length
 
-    const typeColor = isBIPV    ? 'bg-blue-100 text-blue-700'
-                    : isCustom  ? 'bg-gray-100 text-gray-600'
-                    :             'bg-purple-100 text-purple-700'
+    const typeColor  = isBIPV   ? 'bg-blue-100 text-blue-700'
+                     : isCustom ? 'bg-gray-100 text-gray-600'
+                     :            'bg-purple-100 text-purple-700'
     const typeLetter = isBIPV ? 'B' : isCustom ? 'C' : 'S'
+    const typeLabel  = isBIPV ? 'BIPV' : isCustom ? 'CUSTOM' : 'STANDARD'
 
     return `
       <div class="border border-gray-200 rounded-2xl overflow-hidden shadow-sm"
            id="zone-card-${i}">
 
         <!-- ── header ── -->
-        <div class="flex items-center gap-3 px-4 py-3 bg-gray-50 select-none">
+        <div class="flex items-center gap-2 px-4 py-3 bg-gray-50">
+
+          <!-- type badge -->
           <span class="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold
                        flex-shrink-0 ${typeColor}">
             ${typeLetter}
           </span>
-          <div class="flex-1 min-w-0 cursor-pointer"
-               onclick="projectNewPage._toggleZoneCard(${i})">
-            <span class="font-bold text-sm text-gray-900">${this._esc(z.zoneCode)}</span>
-            <span class="text-xs text-gray-400 ml-1.5">${z.zoneType}</span>
-            <span class="ml-2 text-xs ${actCount ? 'text-emerald-600 font-semibold' : 'text-gray-400'}">
-              ${actCount} activit${actCount === 1 ? 'y' : 'ies'}
-            </span>
+
+          <!-- zone name / inline rename input -->
+          <div class="flex-1 min-w-0">
+            ${renaming ? `
+              <div class="flex items-center gap-1.5">
+                <input id="zone-rename-inp-${i}" type="text"
+                  value="${this._esc(z.zoneCode)}"
+                  onkeydown="if(event.key==='Enter'){event.preventDefault();projectNewPage._commitZoneRename(${i})} if(event.key==='Escape') projectNewPage._cancelZoneRename()"
+                  class="flex-1 px-2.5 py-1 text-sm font-bold rounded-lg border-2 border-brand-400
+                         focus:outline-none focus:ring-2 focus:ring-brand-500 uppercase bg-white min-w-0" />
+                <button onclick="projectNewPage._commitZoneRename(${i})" title="Save name"
+                  class="w-7 h-7 flex items-center justify-center rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 flex-shrink-0">
+                  <i class="fas fa-check text-xs"></i>
+                </button>
+                <button onclick="projectNewPage._cancelZoneRename()" title="Cancel"
+                  class="w-7 h-7 flex items-center justify-center rounded-lg bg-gray-200 text-gray-600 hover:bg-gray-300 flex-shrink-0">
+                  <i class="fas fa-times text-xs"></i>
+                </button>
+              </div>
+            ` : `
+              <div class="flex items-center gap-1.5 cursor-pointer"
+                   onclick="projectNewPage._toggleZoneCard(${i})">
+                <span class="font-bold text-sm text-gray-900">${this._esc(z.zoneCode)}</span>
+                <span class="text-xs text-gray-400">${typeLabel}</span>
+                <span class="ml-1 text-xs ${actCount ? 'text-emerald-600 font-semibold' : 'text-gray-400'}">
+                  · ${actCount} activit${actCount === 1 ? 'y' : 'ies'}
+                </span>
+              </div>
+            `}
           </div>
 
-          <!-- action buttons -->
-          <button onclick="projectNewPage._openActivityEditor(${i})"
-            title="Edit activities"
-            class="w-8 h-8 flex items-center justify-center rounded-lg text-sm
-                   ${editing ? 'bg-brand-800 text-white' : 'text-brand-600 hover:bg-brand-50'}
-                   transition-colors flex-shrink-0">
-            <i class="fas fa-list-ul"></i>
-          </button>
-          <button onclick="event.stopPropagation(); projectNewPage._removeZone(${i})"
-            title="Remove zone"
-            class="w-8 h-8 flex items-center justify-center rounded-lg text-red-400
-                   hover:bg-red-50 flex-shrink-0">
-            <i class="fas fa-trash-alt text-xs"></i>
-          </button>
-          <i class="fas fa-chevron-${expanded ? 'up' : 'down'} text-gray-300 text-xs
-                    flex-shrink-0 cursor-pointer"
-             onclick="projectNewPage._toggleZoneCard(${i})"></i>
+          <!-- action buttons (hidden while renaming) -->
+          ${!renaming ? `
+            <button onclick="event.stopPropagation(); projectNewPage._startZoneRename(${i})"
+              title="Rename zone"
+              class="w-8 h-8 flex items-center justify-center rounded-lg text-amber-500
+                     hover:bg-amber-50 flex-shrink-0 transition-colors">
+              <i class="fas fa-pen text-xs"></i>
+            </button>
+            <button onclick="projectNewPage._openActivityEditor(${i})"
+              title="Edit activities"
+              class="w-8 h-8 flex items-center justify-center rounded-lg text-sm
+                     ${editing ? 'bg-brand-800 text-white' : 'text-brand-600 hover:bg-brand-50'}
+                     transition-colors flex-shrink-0">
+              <i class="fas fa-list-ul"></i>
+            </button>
+            <button onclick="event.stopPropagation(); projectNewPage._removeZone(${i})"
+              title="Remove zone"
+              class="w-8 h-8 flex items-center justify-center rounded-lg text-red-400
+                     hover:bg-red-50 flex-shrink-0 transition-colors">
+              <i class="fas fa-trash-alt text-xs"></i>
+            </button>
+            <i class="fas fa-chevron-${expanded ? 'up' : 'down'} text-gray-300 text-xs
+                      flex-shrink-0 cursor-pointer"
+               onclick="projectNewPage._toggleZoneCard(${i})"></i>
+          ` : ''}
         </div>
 
-        <!-- ── collapsible body ── -->
-        <div id="zone-body-${i}" class="${expanded ? '' : 'hidden'}">
+        <!-- ── collapsible body (hidden while renaming) ── -->
+        <div id="zone-body-${i}" class="${expanded && !renaming ? '' : 'hidden'}">
           ${editing ? this._renderActivityEditor(z, i) : this._renderActivityViewer(z, i)}
         </div>
       </div>`
@@ -460,8 +501,39 @@ export class ProjectNewPage {
 
   _toggleZoneCard(i) {
     this._expandedZone = (this._expandedZone === i) ? -1 : i
-    // Don't reset edit mode when just collapsing
     if (this._expandedZone === -1) this._editingZone = -1
+    this._renamingZone = -1
+    document.getElementById('zones-list').innerHTML = this._renderZonesList()
+  }
+
+  // ── Inline zone rename ────────────────────────────────────
+
+  _startZoneRename(i) {
+    this._renamingZone = i
+    this._expandedZone = -1
+    this._editingZone  = -1
+    document.getElementById('zones-list').innerHTML = this._renderZonesList()
+    setTimeout(() => {
+      const inp = document.getElementById(`zone-rename-inp-${i}`)
+      if (inp) { inp.focus(); inp.select() }
+    }, 40)
+  }
+
+  _commitZoneRename(i) {
+    const inp = document.getElementById(`zone-rename-inp-${i}`)
+    const val = (inp?.value || '').trim().toUpperCase()
+    if (!val) { showToast('Zone code cannot be empty', 'warning'); return }
+    if (this.data.zones.some((z, idx) => idx !== i && z.zoneCode === val)) {
+      showToast('Zone code already exists', 'warning'); return
+    }
+    this.data.zones[i].zoneCode = val
+    this._renamingZone = -1
+    document.getElementById('zones-list').innerHTML = this._renderZonesList()
+    showToast(`Zone renamed to ${val}`, 'success')
+  }
+
+  _cancelZoneRename() {
+    this._renamingZone = -1
     document.getElementById('zones-list').innerHTML = this._renderZonesList()
   }
 
@@ -470,8 +542,8 @@ export class ProjectNewPage {
   _openActivityEditor(i) {
     this._expandedZone = i
     this._editingZone  = i
+    this._renamingZone = -1
     document.getElementById('zones-list').innerHTML = this._renderZonesList()
-    // Scroll editor into view smoothly
     setTimeout(() => {
       document.getElementById(`act-editor-${i}`)?.scrollIntoView({ behavior:'smooth', block:'nearest' })
     }, 60)
