@@ -1,31 +1,40 @@
 // ============================================================
 // PROJECT NEW PAGE – 4-step multi-step form
+// Step 2: Full zone + per-zone activity editor
 // Mock IDs assigned automatically when MS Project not configured
 // ============================================================
-import { DB, genId, genMockGuid, isMsConfigured, todayISO, getActivities } from '../db.js'
+import { DB, genId, genMockGuid, isMsConfigured, todayISO,
+         getActivities, BIPV_ACTIVITIES, STANDARD_ACTIVITIES } from '../db.js'
 import { msSync } from '../msproject.js'
 
 export class ProjectNewPage {
   constructor() {
-    this.step = 1
+    this.step       = 1
     this.totalSteps = 4
-    this.saving = false
+    this.saving     = false
+    // Track which zone accordion is expanded (-1 = none)
+    this._expandedZone = -1
+    // Track which zone is in "edit activities" mode (-1 = none)
+    this._editingZone  = -1
+
     this.data = {
-      id:               genId(),
-      name:             '',
-      client:           '',
-      contractor:       'Bolt Industries Sdn Bhd',
-      siteLocation:     '',
-      msProjectId:      '',
-      msProjectUrl:     '',
-      startDate:        todayISO(),
-      expectedEndDate:  '',
-      zones:            [],
-      resourceTemplates:[],
-      status:           'active',
-      createdAt:        new Date().toISOString(),
+      id:                genId(),
+      name:              '',
+      client:            '',
+      contractor:        'Bolt Industries Sdn Bhd',
+      siteLocation:      '',
+      msProjectId:       '',
+      msProjectUrl:      '',
+      startDate:         todayISO(),
+      expectedEndDate:   '',
+      zones:             [],
+      resourceTemplates: [],
+      status:            'active',
+      createdAt:         new Date().toISOString(),
     }
   }
+
+  // ── render ────────────────────────────────────────────────
 
   async render(container) {
     app.setHeaderTitle('New Project', `
@@ -68,7 +77,7 @@ export class ProjectNewPage {
     document.getElementById('step-indicator').innerHTML = `
       <div class="flex items-center">
         ${labels.map((l, i) => {
-          const n = i + 1
+          const n     = i + 1
           const state = n < this.step ? 'done' : n === this.step ? 'active' : 'inactive'
           return `
             ${i > 0 ? `<div class="step-line flex-1 ${n <= this.step ? 'done' : ''}"></div>` : ''}
@@ -84,7 +93,7 @@ export class ProjectNewPage {
   }
 
   _renderContent() {
-    const c = document.getElementById('step-content')
+    const c  = document.getElementById('step-content')
     const fn = [null, this._step1, this._step2, this._step3, this._step4][this.step]
     c.innerHTML = fn ? fn.call(this) : ''
   }
@@ -108,10 +117,12 @@ export class ProjectNewPage {
     `
   }
 
-  // ── Step 1: Project Info ──────────────────────────────────
+  // ══════════════════════════════════════════════════════════
+  // STEP 1 – Project Info
+  // ══════════════════════════════════════════════════════════
 
   _step1() {
-    const d = this.data
+    const d           = this.data
     const msConfigured = isMsConfigured()
     return `
       <h2 class="text-lg font-bold text-gray-900 mb-5 flex items-center gap-2">
@@ -122,8 +133,7 @@ export class ProjectNewPage {
         <div>
           <label class="field-label">Project Name *</label>
           <input id="f-name" type="text" value="${this._esc(d.name)}"
-            placeholder="e.g. NEM 3.0 LHDN Cyberjaya"
-            class="field-input" />
+            placeholder="e.g. NEM 3.0 LHDN Cyberjaya" class="field-input" />
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
@@ -183,7 +193,9 @@ export class ProjectNewPage {
       </div>`
   }
 
-  // ── Step 2: Zone Configuration ────────────────────────────
+  // ══════════════════════════════════════════════════════════
+  // STEP 2 – Zone Configuration  (full activity editor)
+  // ══════════════════════════════════════════════════════════
 
   _step2() {
     return `
@@ -191,74 +203,389 @@ export class ProjectNewPage {
         <span class="w-7 h-7 rounded-lg bg-brand-800 text-white text-xs flex items-center justify-center">2</span>
         Zone Configuration
       </h2>
-      <p class="text-sm text-gray-500 mb-5">Add construction zones and their activity lists</p>
+      <p class="text-sm text-gray-500 mb-5">
+        Add zones, then customise each zone's activity checklist.
+      </p>
 
-      <div class="flex gap-2 mb-4">
+      <!-- ── Add zone row ── -->
+      <div class="flex gap-2 mb-5">
         <select id="zone-type-sel"
-          class="flex-1 px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white">
+          class="flex-1 px-3 py-2.5 rounded-xl border border-gray-200 text-sm
+                 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white">
           <option value="BIPV">BIPV Zone (CP1–CP7)</option>
           <option value="STANDARD">Standard Zone (CPN1–CPN8)</option>
+          <option value="CUSTOM">Custom Zone (blank activities)</option>
         </select>
         <input id="zone-code-inp" type="text" placeholder="Code e.g. CP1"
-          class="w-32 px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 uppercase"
+          class="w-28 px-3 py-2.5 rounded-xl border border-gray-200 text-sm
+                 focus:outline-none focus:ring-2 focus:ring-brand-500 uppercase"
           onkeydown="if(event.key==='Enter') projectNewPage._addZone()" />
         <button onclick="projectNewPage._addZone()"
-          class="px-4 py-2.5 bg-brand-800 text-white rounded-xl text-sm font-semibold hover:bg-brand-700 whitespace-nowrap">
-          <i class="fas fa-plus mr-1"></i>Add
+          class="px-4 py-2.5 bg-brand-800 text-white rounded-xl text-sm font-semibold
+                 hover:bg-brand-700 whitespace-nowrap flex items-center gap-1">
+          <i class="fas fa-plus"></i><span class="hidden sm:inline">Add Zone</span>
         </button>
       </div>
 
-      <div id="zones-list">
-        ${this._renderZonesList()}
-      </div>`
+      <!-- ── Zones list ── -->
+      <div id="zones-list">${this._renderZonesList()}</div>`
   }
+
+  // ── Zones list ────────────────────────────────────────────
 
   _renderZonesList() {
     if (!this.data.zones.length) {
-      return `<div class="text-center py-10 text-gray-400 text-sm border-2 border-dashed border-gray-200 rounded-xl">
-        <i class="fas fa-layer-group text-3xl mb-2 block text-gray-300"></i>
-        No zones added yet. Add at least one zone to continue.
-      </div>`
+      return `
+        <div class="text-center py-10 text-gray-400 text-sm
+                    border-2 border-dashed border-gray-200 rounded-2xl">
+          <i class="fas fa-layer-group text-3xl mb-2 block text-gray-300"></i>
+          No zones added yet.<br>
+          <span class="text-xs text-gray-300">Select a type, enter a code and click Add Zone.</span>
+        </div>`
     }
     return `
-      <div class="space-y-2">
-        ${this.data.zones.map((z, i) => this._renderZoneItem(z, i)).join('')}
+      <div class="space-y-3" id="zones-accordion">
+        ${this.data.zones.map((z, i) => this._renderZoneCard(z, i)).join('')}
       </div>
-      <p class="text-xs text-gray-400 mt-3 text-center">${this.data.zones.length} zone(s) configured</p>`
+      <p class="text-xs text-gray-400 mt-3 text-center">
+        ${this.data.zones.length} zone(s) · ${this.data.zones.reduce((s,z) => s+(z.activities||[]).length,0)} total activities
+      </p>`
   }
 
-  _renderZoneItem(z, i) {
-    const isBIPV = z.zoneType === 'BIPV'
+  // ── Single zone card (header + collapsible body) ──────────
+
+  _renderZoneCard(z, i) {
+    const isBIPV    = z.zoneType === 'BIPV'
+    const isCustom  = z.zoneType === 'CUSTOM'
+    const expanded  = this._expandedZone === i
+    const editing   = this._editingZone  === i
+    const actCount  = (z.activities || []).length
+
+    const typeColor = isBIPV    ? 'bg-blue-100 text-blue-700'
+                    : isCustom  ? 'bg-gray-100 text-gray-600'
+                    :             'bg-purple-100 text-purple-700'
+    const typeLetter = isBIPV ? 'B' : isCustom ? 'C' : 'S'
+
     return `
-      <div class="border border-gray-200 rounded-xl overflow-hidden">
-        <div class="flex items-center gap-3 px-4 py-3 bg-gray-50 cursor-pointer select-none"
-          onclick="this.nextElementSibling.classList.toggle('hidden')">
-          <span class="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold
-            ${isBIPV ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}">
-            ${isBIPV ? 'B' : 'S'}
+      <div class="border border-gray-200 rounded-2xl overflow-hidden shadow-sm"
+           id="zone-card-${i}">
+
+        <!-- ── header ── -->
+        <div class="flex items-center gap-3 px-4 py-3 bg-gray-50 select-none">
+          <span class="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold
+                       flex-shrink-0 ${typeColor}">
+            ${typeLetter}
           </span>
-          <div class="flex-1 min-w-0">
-            <span class="font-semibold text-sm text-gray-900">${this._esc(z.zoneCode)}</span>
-            <span class="text-xs text-gray-400 ml-2">${z.zoneType}</span>
+          <div class="flex-1 min-w-0 cursor-pointer"
+               onclick="projectNewPage._toggleZoneCard(${i})">
+            <span class="font-bold text-sm text-gray-900">${this._esc(z.zoneCode)}</span>
+            <span class="text-xs text-gray-400 ml-1.5">${z.zoneType}</span>
+            <span class="ml-2 text-xs ${actCount ? 'text-emerald-600 font-semibold' : 'text-gray-400'}">
+              ${actCount} activit${actCount === 1 ? 'y' : 'ies'}
+            </span>
           </div>
-          <span class="text-xs text-gray-400">${(z.activities || []).length} activities</span>
+
+          <!-- action buttons -->
+          <button onclick="projectNewPage._openActivityEditor(${i})"
+            title="Edit activities"
+            class="w-8 h-8 flex items-center justify-center rounded-lg text-sm
+                   ${editing ? 'bg-brand-800 text-white' : 'text-brand-600 hover:bg-brand-50'}
+                   transition-colors flex-shrink-0">
+            <i class="fas fa-list-ul"></i>
+          </button>
           <button onclick="event.stopPropagation(); projectNewPage._removeZone(${i})"
-            class="w-7 h-7 flex items-center justify-center rounded-lg text-red-400 hover:bg-red-50 flex-shrink-0">
+            title="Remove zone"
+            class="w-8 h-8 flex items-center justify-center rounded-lg text-red-400
+                   hover:bg-red-50 flex-shrink-0">
             <i class="fas fa-trash-alt text-xs"></i>
           </button>
-          <i class="fas fa-chevron-down text-gray-300 text-xs flex-shrink-0"></i>
+          <i class="fas fa-chevron-${expanded ? 'up' : 'down'} text-gray-300 text-xs
+                    flex-shrink-0 cursor-pointer"
+             onclick="projectNewPage._toggleZoneCard(${i})"></i>
         </div>
-        <div class="hidden px-4 py-3 bg-white">
-          <div class="text-xs text-gray-500 space-y-1 max-h-48 overflow-y-auto">
-            ${(z.activities || []).map((a, ai) => `
-              <div class="flex items-center gap-2 py-0.5">
-                <span class="w-5 h-5 rounded bg-gray-100 text-gray-500 text-xs flex items-center justify-center flex-shrink-0">${a.sequence || ai + 1}</span>
-                <span class="flex-1">${this._esc(a.name || a.activityName || '')}</span>
-              </div>`).join('')}
-          </div>
+
+        <!-- ── collapsible body ── -->
+        <div id="zone-body-${i}" class="${expanded ? '' : 'hidden'}">
+          ${editing ? this._renderActivityEditor(z, i) : this._renderActivityViewer(z, i)}
         </div>
       </div>`
   }
+
+  // ── Read-only activity viewer ─────────────────────────────
+
+  _renderActivityViewer(z, i) {
+    const acts = z.activities || []
+    if (!acts.length) {
+      return `
+        <div class="px-4 py-4 text-center">
+          <p class="text-sm text-gray-400">No activities yet.</p>
+          <button onclick="projectNewPage._openActivityEditor(${i})"
+            class="mt-2 text-xs text-brand-600 font-semibold hover:underline">
+            <i class="fas fa-plus mr-1"></i>Add activities
+          </button>
+        </div>`
+    }
+    return `
+      <div class="divide-y divide-gray-50">
+        ${acts.map((a, ai) => `
+          <div class="flex items-center gap-3 px-4 py-2.5">
+            <span class="w-5 h-5 rounded bg-gray-100 text-gray-500 text-xs flex items-center
+                         justify-center font-semibold flex-shrink-0">${a.sequence || ai+1}</span>
+            <span class="flex-1 text-sm text-gray-800">${this._esc(a.name || a.activityName || '')}</span>
+          </div>`).join('')}
+        <div class="px-4 py-2.5 bg-gray-50 flex justify-end">
+          <button onclick="projectNewPage._openActivityEditor(${i})"
+            class="text-xs text-brand-600 font-semibold hover:underline flex items-center gap-1">
+            <i class="fas fa-edit"></i> Edit activities
+          </button>
+        </div>
+      </div>`
+  }
+
+  // ── Full activity editor ──────────────────────────────────
+
+  _renderActivityEditor(z, i) {
+    const acts    = z.activities || []
+    const isBIPV  = z.zoneType === 'BIPV'
+    const presets = isBIPV ? BIPV_ACTIVITIES : STANDARD_ACTIVITIES
+
+    return `
+      <div class="bg-white border-t border-gray-100 px-4 py-4"
+           id="act-editor-${i}">
+
+        <!-- section label -->
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-xs font-bold text-gray-600 uppercase tracking-wide">
+            <i class="fas fa-list-ul mr-1 text-brand-500"></i>Activities
+          </span>
+          <button onclick="projectNewPage._closeActivityEditor(${i})"
+            class="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">
+            <i class="fas fa-check-circle text-emerald-500"></i> Done
+          </button>
+        </div>
+
+        <!-- current activity list -->
+        <div id="act-list-${i}" class="space-y-1.5 mb-4 max-h-64 overflow-y-auto pr-1">
+          ${acts.length === 0
+            ? `<p class="text-xs text-gray-400 text-center py-3 border border-dashed border-gray-200 rounded-xl">
+                No activities yet – add from presets or type a custom name below.</p>`
+            : acts.map((a, ai) => this._renderActivityRow(a, i, ai)).join('')}
+        </div>
+
+        <!-- preset chips -->
+        ${z.zoneType !== 'CUSTOM' ? `
+        <div class="mb-4">
+          <p class="text-xs text-gray-500 mb-2 font-semibold">
+            <i class="fas fa-magic mr-1 text-purple-400"></i>Quick-add from presets:
+          </p>
+          <div class="flex flex-wrap gap-1.5">
+            ${presets.map(name => {
+              const exists = acts.some(a => (a.name||a.activityName||'').toLowerCase() === name.toLowerCase())
+              return `
+                <button onclick="projectNewPage._addPresetActivity(${i},'${this._escJs(name)}')"
+                  class="px-2.5 py-1 text-xs rounded-lg border transition-colors
+                    ${exists
+                      ? 'bg-emerald-50 text-emerald-600 border-emerald-200 cursor-default'
+                      : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-300'}"
+                  ${exists ? 'disabled' : ''}>
+                  ${exists ? '<i class="fas fa-check mr-1"></i>' : ''}${this._esc(name)}
+                </button>`
+            }).join('')}
+          </div>
+        </div>` : ''}
+
+        <!-- custom activity input -->
+        <div class="flex gap-2">
+          <input id="act-inp-${i}" type="text"
+            placeholder="Custom activity name…"
+            class="flex-1 px-3 py-2.5 rounded-xl border border-gray-200 text-sm
+                   focus:outline-none focus:ring-2 focus:ring-brand-500"
+            onkeydown="if(event.key==='Enter') projectNewPage._addCustomActivity(${i})" />
+          <button onclick="projectNewPage._addCustomActivity(${i})"
+            class="px-4 py-2.5 bg-brand-800 text-white rounded-xl text-sm font-semibold
+                   hover:bg-brand-700 whitespace-nowrap">
+            <i class="fas fa-plus mr-1"></i>Add
+          </button>
+        </div>
+      </div>`
+  }
+
+  // ── Single editable activity row ──────────────────────────
+
+  _renderActivityRow(a, zi, ai) {
+    const name = this._esc(a.name || a.activityName || '')
+    return `
+      <div class="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2 group"
+           id="act-row-${zi}-${ai}">
+        <!-- drag handle (visual only) -->
+        <i class="fas fa-grip-vertical text-gray-300 text-xs cursor-grab flex-shrink-0"></i>
+
+        <!-- sequence badge -->
+        <span class="w-5 h-5 rounded bg-white border border-gray-200 text-gray-500 text-xs
+                     flex items-center justify-center font-semibold flex-shrink-0">
+          ${a.sequence || ai+1}
+        </span>
+
+        <!-- inline editable name -->
+        <input type="text" value="${name}"
+          onchange="projectNewPage._renameActivity(${zi},${ai},this.value)"
+          class="flex-1 text-sm bg-transparent border-none outline-none text-gray-800
+                 focus:bg-white focus:ring-1 focus:ring-brand-400 rounded px-1 py-0.5" />
+
+        <!-- up / down / delete -->
+        <button onclick="projectNewPage._moveActivity(${zi},${ai},-1)"
+          title="Move up"
+          class="w-6 h-6 flex items-center justify-center rounded text-gray-300
+                 hover:text-gray-600 hover:bg-white transition-colors flex-shrink-0
+                 ${ai === 0 ? 'opacity-30 pointer-events-none' : ''}">
+          <i class="fas fa-chevron-up text-xs"></i>
+        </button>
+        <button onclick="projectNewPage._moveActivity(${zi},${ai},1)"
+          title="Move down"
+          class="w-6 h-6 flex items-center justify-center rounded text-gray-300
+                 hover:text-gray-600 hover:bg-white transition-colors flex-shrink-0
+                 ${ai === (this.data.zones[zi]?.activities||[]).length-1 ? 'opacity-30 pointer-events-none' : ''}">
+          <i class="fas fa-chevron-down text-xs"></i>
+        </button>
+        <button onclick="projectNewPage._removeActivity(${zi},${ai})"
+          title="Remove"
+          class="w-6 h-6 flex items-center justify-center rounded text-red-300
+                 hover:text-red-600 hover:bg-red-50 transition-colors flex-shrink-0">
+          <i class="fas fa-times text-xs"></i>
+        </button>
+      </div>`
+  }
+
+  // ── Zone card toggle ──────────────────────────────────────
+
+  _toggleZoneCard(i) {
+    this._expandedZone = (this._expandedZone === i) ? -1 : i
+    // Don't reset edit mode when just collapsing
+    if (this._expandedZone === -1) this._editingZone = -1
+    document.getElementById('zones-list').innerHTML = this._renderZonesList()
+  }
+
+  // ── Open / close activity editor ──────────────────────────
+
+  _openActivityEditor(i) {
+    this._expandedZone = i
+    this._editingZone  = i
+    document.getElementById('zones-list').innerHTML = this._renderZonesList()
+    // Scroll editor into view smoothly
+    setTimeout(() => {
+      document.getElementById(`act-editor-${i}`)?.scrollIntoView({ behavior:'smooth', block:'nearest' })
+    }, 60)
+  }
+
+  _closeActivityEditor(i) {
+    this._editingZone = -1
+    document.getElementById('zones-list').innerHTML = this._renderZonesList()
+  }
+
+  // ── Activity CRUD ─────────────────────────────────────────
+
+  _refreshActList(zi) {
+    const z    = this.data.zones[zi]
+    const acts = z.activities || []
+    const listEl = document.getElementById(`act-list-${zi}`)
+    if (!listEl) { document.getElementById('zones-list').innerHTML = this._renderZonesList(); return }
+    if (!acts.length) {
+      listEl.innerHTML = `<p class="text-xs text-gray-400 text-center py-3 border border-dashed
+        border-gray-200 rounded-xl">No activities yet – add from presets or type below.</p>`
+      return
+    }
+    listEl.innerHTML = acts.map((a, ai) => this._renderActivityRow(a, zi, ai)).join('')
+  }
+
+  _addPresetActivity(zi, name) {
+    const z    = this.data.zones[zi]
+    if (!z) return
+    const acts = z.activities || []
+    if (acts.some(a => (a.name||a.activityName||'').toLowerCase() === name.toLowerCase())) return
+    acts.push({
+      id:              genId(),
+      name,
+      sequence:        acts.length + 1,
+      percentComplete: 0,
+      msTaskId:        isMsConfigured() ? '' : genMockGuid(),
+    })
+    z.activities = acts
+    // Re-render the whole editor so preset chips update
+    document.getElementById('zones-list').innerHTML = this._renderZonesList()
+    setTimeout(() => {
+      document.getElementById(`act-editor-${zi}`)?.scrollIntoView({ behavior:'smooth', block:'nearest' })
+    }, 60)
+  }
+
+  _addCustomActivity(zi) {
+    const inp  = document.getElementById(`act-inp-${zi}`)
+    const name = (inp?.value || '').trim()
+    if (!name) { showToast('Enter an activity name', 'warning'); return }
+    const z    = this.data.zones[zi]
+    if (!z) return
+    const acts = z.activities || []
+    if (acts.some(a => (a.name||a.activityName||'').toLowerCase() === name.toLowerCase())) {
+      showToast('Activity already exists', 'warning'); return
+    }
+    acts.push({
+      id:              genId(),
+      name,
+      sequence:        acts.length + 1,
+      percentComplete: 0,
+      msTaskId:        isMsConfigured() ? '' : genMockGuid(),
+    })
+    z.activities = acts
+    if (inp) inp.value = ''
+    this._refreshActList(zi)
+    // Show confirmation
+    showToast(`"${name}" added`, 'success')
+  }
+
+  _renameActivity(zi, ai, newName) {
+    const z = this.data.zones[zi]
+    if (!z?.activities?.[ai]) return
+    z.activities[ai].name = newName.trim() || z.activities[ai].name
+  }
+
+  _moveActivity(zi, ai, dir) {
+    const acts = this.data.zones[zi]?.activities
+    if (!acts) return
+    const target = ai + dir
+    if (target < 0 || target >= acts.length) return
+    ;[acts[ai], acts[target]] = [acts[target], acts[ai]]
+    // Re-sequence
+    acts.forEach((a, idx) => { a.sequence = idx + 1 })
+    this._refreshActList(zi)
+  }
+
+  _removeActivity(zi, ai) {
+    const acts = this.data.zones[zi]?.activities
+    if (!acts) return
+    acts.splice(ai, 1)
+    acts.forEach((a, idx) => { a.sequence = idx + 1 })
+    this._refreshActList(zi)
+    // Refresh preset chips too (so removed ones can be re-added)
+    const presetEl = document.querySelector(`#act-editor-${zi} .flex.flex-wrap`)
+    if (presetEl) {
+      const z        = this.data.zones[zi]
+      const isBIPV   = z.zoneType === 'BIPV'
+      const presets  = isBIPV ? BIPV_ACTIVITIES : STANDARD_ACTIVITIES
+      presetEl.innerHTML = presets.map(name => {
+        const exists = (z.activities||[]).some(a => (a.name||'').toLowerCase() === name.toLowerCase())
+        return `
+          <button onclick="projectNewPage._addPresetActivity(${zi},'${this._escJs(name)}')"
+            class="px-2.5 py-1 text-xs rounded-lg border transition-colors
+              ${exists
+                ? 'bg-emerald-50 text-emerald-600 border-emerald-200 cursor-default'
+                : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-300'}"
+            ${exists ? 'disabled' : ''}>
+            ${exists ? '<i class="fas fa-check mr-1"></i>' : ''}${this._esc(name)}
+          </button>`
+      }).join('')
+    }
+  }
+
+  // ── Add / Remove zone ─────────────────────────────────────
 
   _addZone() {
     const code = (document.getElementById('zone-code-inp')?.value || '').trim().toUpperCase()
@@ -267,30 +594,44 @@ export class ProjectNewPage {
     if (this.data.zones.find(z => z.zoneCode === code)) {
       showToast('Zone code already exists', 'warning'); return
     }
-    const activities = getActivities(type)
+    const activities = type === 'CUSTOM' ? [] : getActivities(type)
+    const newIdx = this.data.zones.length
     this.data.zones.push({
-      id:         genId(),
-      projectId:  this.data.id,
-      zoneCode:   code,
-      zoneType:   type,
-      msTaskId:   isMsConfigured() ? '' : genMockGuid(),
+      id:        genId(),
+      projectId: this.data.id,
+      zoneCode:  code,
+      zoneType:  type,
+      msTaskId:  isMsConfigured() ? '' : genMockGuid(),
       activities,
     })
     const inp = document.getElementById('zone-code-inp')
     if (inp) inp.value = ''
+    // Auto-expand and open activity editor for the new zone
+    this._expandedZone = newIdx
+    this._editingZone  = newIdx
     document.getElementById('zones-list').innerHTML = this._renderZonesList()
+    setTimeout(() => {
+      document.getElementById(`zone-card-${newIdx}`)?.scrollIntoView({ behavior:'smooth', block:'nearest' })
+    }, 60)
+    showToast(`Zone ${code} added – customise its activities below`, 'success')
   }
 
   _removeZone(i) {
+    const code = this.data.zones[i]?.zoneCode || ''
     this.data.zones.splice(i, 1)
+    if (this._expandedZone === i) { this._expandedZone = -1; this._editingZone = -1 }
+    else if (this._expandedZone > i) this._expandedZone--
     document.getElementById('zones-list').innerHTML = this._renderZonesList()
+    if (code) showToast(`Zone ${code} removed`, 'info')
   }
 
-  // ── Step 3: Resource Templates ────────────────────────────
+  // ══════════════════════════════════════════════════════════
+  // STEP 3 – Resource Templates
+  // ══════════════════════════════════════════════════════════
 
   _step3() {
-    const presetMP = ['Engineer', 'Site Supervisor', 'General Workers', 'Backhoe Operator', 'Site Safety Supervisor', 'Project Manager']
-    const presetMC = ['Backhoe', 'Crane', 'Tipper Truck', 'Forklift', 'Bar Bending Machine', 'Road Cutting Machine']
+    const presetMP = ['Engineer','Site Supervisor','General Workers','Backhoe Operator','Site Safety Supervisor','Project Manager']
+    const presetMC = ['Backhoe','Crane','Tipper Truck','Forklift','Bar Bending Machine','Road Cutting Machine']
     return `
       <h2 class="text-lg font-bold text-gray-900 mb-1 flex items-center gap-2">
         <span class="w-7 h-7 rounded-lg bg-brand-800 text-white text-xs flex items-center justify-center">3</span>
@@ -300,15 +641,18 @@ export class ProjectNewPage {
 
       <div class="flex gap-2 mb-3">
         <select id="res-type-sel"
-          class="px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white">
+          class="px-3 py-2.5 rounded-xl border border-gray-200 text-sm
+                 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white">
           <option value="MANPOWER">👷 Manpower</option>
           <option value="MACHINERY">🔧 Machinery</option>
         </select>
         <input id="res-name-inp" type="text" placeholder="Role / equipment name"
-          class="flex-1 px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+          class="flex-1 px-3 py-2.5 rounded-xl border border-gray-200 text-sm
+                 focus:outline-none focus:ring-2 focus:ring-brand-500"
           onkeydown="if(event.key==='Enter') projectNewPage._addResource()" />
         <button onclick="projectNewPage._addResource()"
-          class="px-4 py-2.5 bg-brand-800 text-white rounded-xl text-sm font-semibold hover:bg-brand-700 whitespace-nowrap">
+          class="px-4 py-2.5 bg-brand-800 text-white rounded-xl text-sm font-semibold
+                 hover:bg-brand-700 whitespace-nowrap">
           <i class="fas fa-plus mr-1"></i>Add
         </button>
       </div>
@@ -323,9 +667,7 @@ export class ProjectNewPage {
         </div>
       </div>
 
-      <div id="resources-list">
-        ${this._renderResourcesList()}
-      </div>`
+      <div id="resources-list">${this._renderResourcesList()}</div>`
   }
 
   _renderResourcesList() {
@@ -352,7 +694,7 @@ export class ProjectNewPage {
         <span class="text-lg flex-shrink-0">${r.type === 'MANPOWER' ? '👷' : '🔧'}</span>
         <span class="flex-1 text-sm font-medium text-gray-800">${this._esc(r.roleName)}</span>
         <button onclick="projectNewPage._removeResource('${r.id}')"
-          class="w-7 h-7 flex items-center justify-center rounded-lg text-red-400 hover:bg-red-50 flex-shrink-0">
+          class="w-7 h-7 flex items-center justify-center rounded-lg text-red-400 hover:bg-red-50">
           <i class="fas fa-trash-alt text-xs"></i>
         </button>
       </div>`
@@ -388,10 +730,12 @@ export class ProjectNewPage {
     document.getElementById('resources-list').innerHTML = this._renderResourcesList()
   }
 
-  // ── Step 4: Review & Save ─────────────────────────────────
+  // ══════════════════════════════════════════════════════════
+  // STEP 4 – Review & Save
+  // ══════════════════════════════════════════════════════════
 
   _step4() {
-    const d = this.data
+    const d            = this.data
     const msConfigured = isMsConfigured()
     return `
       <h2 class="text-lg font-bold text-gray-900 mb-5 flex items-center gap-2">
@@ -406,15 +750,16 @@ export class ProjectNewPage {
         <i class="fas fa-magic text-purple-500 mt-0.5 flex-shrink-0"></i>
         <div class="flex-1 min-w-0">
           <span class="font-semibold text-purple-800">Demo Mode Active</span>
-          <div class="text-purple-600 text-xs mt-0.5">Mock GUIDs are auto-assigned to the project, each zone and every activity so the app is fully functional without MS Project Online.</div>
+          <div class="text-purple-600 text-xs mt-0.5">Mock GUIDs are auto-assigned to the project, each zone and every activity.</div>
           <div class="mt-2 bg-white border border-purple-100 rounded-lg px-3 py-2 text-xs">
-            <span class="text-purple-500 font-semibold">Project&nbsp;ID:&nbsp;</span>
+            <span class="text-purple-500 font-semibold">Project ID: </span>
             <code class="font-mono text-gray-600 break-all">${d.id}</code>
           </div>
         </div>
       </div>` : ''}
 
       <div class="space-y-3 text-sm">
+        <!-- Project info -->
         <div class="bg-blue-50 rounded-xl p-4 border border-blue-100">
           <h3 class="font-semibold text-blue-900 mb-3 flex items-center gap-2">
             <i class="fas fa-info-circle text-blue-500"></i> Project Info
@@ -428,32 +773,44 @@ export class ProjectNewPage {
             <span class="text-blue-800">${this._esc(d.contractor)}</span>
             <span class="text-blue-500 font-medium">Location</span>
             <span class="text-blue-800">${this._esc(d.siteLocation)}</span>
-            <span class="text-blue-500 font-medium">Start Date</span>
+            <span class="text-blue-500 font-medium">Start</span>
             <span class="text-blue-800">${d.startDate}</span>
-            <span class="text-blue-500 font-medium">End Date</span>
+            <span class="text-blue-500 font-medium">End</span>
             <span class="text-blue-800">${d.expectedEndDate}</span>
           </div>
         </div>
 
+        <!-- Zones -->
         <div class="bg-purple-50 rounded-xl p-4 border border-purple-100">
           <h3 class="font-semibold text-purple-900 mb-3 flex items-center gap-2">
             <i class="fas fa-layer-group text-purple-500"></i> Zones (${d.zones.length})
           </h3>
           ${d.zones.length === 0
-            ? `<p class="text-amber-600 text-xs flex items-center gap-1"><i class="fas fa-info-circle"></i> No zones added yet — you can add them after saving</p>`
+            ? `<p class="text-amber-600 text-xs flex items-center gap-1">
+                <i class="fas fa-info-circle"></i> No zones added yet — you can add them after saving</p>`
             : d.zones.map(z => `
-              <div class="flex items-center justify-between py-1.5 border-b border-purple-100 last:border-0">
-                <div class="flex items-center gap-2">
-                  <span class="font-semibold text-purple-900 text-xs">${this._esc(z.zoneCode)}</span>
-                  <span class="text-xs bg-purple-200 text-purple-800 px-1.5 py-0.5 rounded-full">${z.zoneType}</span>
+              <div class="py-1.5 border-b border-purple-100 last:border-0">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="font-semibold text-purple-900 text-xs">${this._esc(z.zoneCode)}</span>
+                    <span class="text-xs bg-purple-200 text-purple-800 px-1.5 py-0.5 rounded-full">${z.zoneType}</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-purple-500">${(z.activities||[]).length} activities</span>
+                    ${!msConfigured ? `<code class="text-xs font-mono text-gray-400 hidden sm:block truncate max-w-[110px]">${z.msTaskId||''}</code>` : ''}
+                  </div>
                 </div>
-                <div class="flex items-center gap-2">
-                  <span class="text-xs text-purple-500">${(z.activities || []).length} activities</span>
-                  ${!msConfigured ? `<code class="text-xs font-mono text-gray-400 hidden sm:block truncate max-w-[110px]">${z.msTaskId || ''}</code>` : ''}
-                </div>
+                ${(z.activities||[]).length > 0 ? `
+                <div class="mt-1 flex flex-wrap gap-1">
+                  ${(z.activities||[]).slice(0,4).map(a =>
+                    `<span class="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">${this._esc(a.name||'')}</span>`
+                  ).join('')}
+                  ${(z.activities||[]).length > 4 ? `<span class="text-xs text-purple-400">+${(z.activities||[]).length-4} more</span>` : ''}
+                </div>` : ''}
               </div>`).join('')}
         </div>
 
+        <!-- Resources -->
         <div class="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
           <h3 class="font-semibold text-emerald-900 mb-2 flex items-center gap-2">
             <i class="fas fa-users text-emerald-500"></i> Resources (${d.resourceTemplates.length})
@@ -468,6 +825,7 @@ export class ProjectNewPage {
                </div>`}
         </div>
 
+        <!-- MS Project Sync -->
         <div class="bg-gray-50 rounded-xl p-4 border border-gray-200">
           <h3 class="font-semibold text-gray-700 mb-2 flex items-center gap-2">
             <i class="fab fa-microsoft text-blue-500"></i> MS Project Sync
@@ -475,7 +833,9 @@ export class ProjectNewPage {
           ${msConfigured
             ? `<div class="text-xs text-gray-600">
                 <span class="text-emerald-600 font-semibold">✓ Configured</span> –
-                ${d.msProjectId ? `Project GUID: <code class="font-mono bg-white px-1 rounded">${d.msProjectId}</code>` : 'New project will be linked on first sync'}
+                ${d.msProjectId
+                  ? `Project GUID: <code class="font-mono bg-white px-1 rounded">${d.msProjectId}</code>`
+                  : 'New project will be linked on first sync'}
                </div>`
             : `<div class="space-y-1.5 text-xs">
                 <div class="flex items-center gap-1.5 text-purple-700">
@@ -490,9 +850,9 @@ export class ProjectNewPage {
                   ${d.zones.slice(0,2).map(z => `
                   <div class="flex items-center gap-2 bg-white rounded-lg px-2.5 py-1.5 border border-purple-100">
                     <span class="text-purple-500 font-semibold w-24 flex-shrink-0">${this._esc(z.zoneCode)}</span>
-                    <code class="font-mono text-gray-500 text-xs truncate">${z.msTaskId || '(will be generated)'}</code>
+                    <code class="font-mono text-gray-500 text-xs truncate">${z.msTaskId||'(will be generated)'}</code>
                   </div>`).join('')}
-                  ${d.zones.length > 2 ? `<div class="text-purple-400 text-center text-xs">+${d.zones.length - 2} more zone IDs…</div>` : ''}
+                  ${d.zones.length > 2 ? `<div class="text-purple-400 text-center text-xs">+${d.zones.length-2} more zone IDs…</div>` : ''}
                 </div>
                 <p class="text-gray-400 text-xs mt-1">Configure MS Project in
                   <button onclick="app.navTo('#/settings')" class="text-purple-600 underline font-semibold">Settings</button>
@@ -502,33 +862,35 @@ export class ProjectNewPage {
       </div>`
   }
 
-  // ── Navigation ────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════
+  // Navigation
+  // ══════════════════════════════════════════════════════════
 
   _collectStep1() {
-    this.data.name          = document.getElementById('f-name')?.value.trim()        || ''
-    this.data.client        = document.getElementById('f-client')?.value.trim()      || ''
-    this.data.contractor    = document.getElementById('f-contractor')?.value.trim()  || ''
-    this.data.siteLocation  = document.getElementById('f-location')?.value.trim()    || ''
-    this.data.startDate     = document.getElementById('f-start')?.value             || ''
-    this.data.expectedEndDate = document.getElementById('f-end')?.value             || ''
+    this.data.name            = document.getElementById('f-name')?.value.trim()       || ''
+    this.data.client          = document.getElementById('f-client')?.value.trim()     || ''
+    this.data.contractor      = document.getElementById('f-contractor')?.value.trim() || ''
+    this.data.siteLocation    = document.getElementById('f-location')?.value.trim()   || ''
+    this.data.startDate       = document.getElementById('f-start')?.value             || ''
+    this.data.expectedEndDate = document.getElementById('f-end')?.value               || ''
     if (isMsConfigured()) {
-      this.data.msProjectUrl = document.getElementById('f-ms-url')?.value.trim()    || ''
-      this.data.msProjectId  = document.getElementById('f-ms-id')?.value.trim()     || ''
+      this.data.msProjectUrl = document.getElementById('f-ms-url')?.value.trim() || ''
+      this.data.msProjectId  = document.getElementById('f-ms-id')?.value.trim()  || ''
     }
   }
 
   _validate() {
     if (this.step === 1) {
       this._collectStep1()
-      if (!this.data.name)          { showToast('Project name is required', 'error');     return false }
-      if (!this.data.client)        { showToast('Client name is required', 'error');      return false }
-      if (!this.data.contractor)    { showToast('Contractor is required', 'error');       return false }
-      if (!this.data.siteLocation)  { showToast('Site location is required', 'error');   return false }
-      if (!this.data.startDate)     { showToast('Start date is required', 'error');      return false }
-      if (!this.data.expectedEndDate) { showToast('Expected end date is required', 'error'); return false }
+      if (!this.data.name)            { showToast('Project name is required', 'error');       return false }
+      if (!this.data.client)          { showToast('Client name is required', 'error');        return false }
+      if (!this.data.contractor)      { showToast('Contractor is required', 'error');         return false }
+      if (!this.data.siteLocation)    { showToast('Site location is required', 'error');      return false }
+      if (!this.data.startDate)       { showToast('Start date is required', 'error');         return false }
+      if (!this.data.expectedEndDate) { showToast('Expected end date is required', 'error');  return false }
     }
     if (this.step === 2) {
-      // Zones are optional – show a soft warning but do not block navigation
+      // Zones are optional – soft warning only
       if (!this.data.zones.length) {
         showToast('No zones added – you can still save and add zones later', 'warning')
       }
@@ -538,9 +900,11 @@ export class ProjectNewPage {
 
   _next() {
     if (!this._validate()) return
+    // Reset zone UI state when leaving step 2
+    if (this.step === 2) { this._expandedZone = -1; this._editingZone = -1 }
     this.step++
     this._renderStep()
-    document.getElementById('step-content')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    document.getElementById('step-content')?.scrollIntoView({ behavior:'smooth', block:'start' })
   }
 
   _prev() {
@@ -557,26 +921,21 @@ export class ProjectNewPage {
     if (btn) { btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Saving…'; btn.disabled = true }
 
     try {
-      // Assign mock IDs if MS Project not configured
       if (!isMsConfigured()) {
         if (!this.data.msProjectId) this.data.msProjectId = genMockGuid()
         this.data.msProjectUrl = this.data.msProjectUrl || ''
         this.data.syncStatus   = 'mock'
-        // Ensure every zone + activity has msTaskId
         this.data.zones = this.data.zones.map(z => ({
           ...z,
-          msTaskId: z.msTaskId || genMockGuid(),
+          msTaskId:   z.msTaskId || genMockGuid(),
           activities: (z.activities || []).map(a => ({
-            ...a,
-            msTaskId: a.msTaskId || genMockGuid(),
+            ...a, msTaskId: a.msTaskId || genMockGuid(),
           })),
         }))
         this.data.resourceTemplates = this.data.resourceTemplates.map(r => ({
-          ...r,
-          msResourceId: r.msResourceId || genMockGuid(),
+          ...r, msResourceId: r.msResourceId || genMockGuid(),
         }))
       } else {
-        // Try to sync zones to MS Project Online
         try {
           const result = await msSync.syncProjectZones(this.data)
           this.data.zones      = result.zones
@@ -586,7 +945,7 @@ export class ProjectNewPage {
           this.data.syncStatus = 'mock'
           this.data.zones = this.data.zones.map(z => ({
             ...z,
-            msTaskId: z.msTaskId || genMockGuid(),
+            msTaskId:   z.msTaskId || genMockGuid(),
             activities: (z.activities || []).map(a => ({
               ...a, msTaskId: a.msTaskId || genMockGuid(),
             })),
@@ -605,11 +964,20 @@ export class ProjectNewPage {
     }
   }
 
-  // ── Utility ───────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════
+  // Utilities
+  // ══════════════════════════════════════════════════════════
+
   _esc(s) {
     if (s == null) return ''
     return String(s)
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
       .replace(/"/g,'&quot;').replace(/'/g,'&#39;')
+  }
+
+  /** Escape a string for use inside a JS string literal in an onclick attribute */
+  _escJs(s) {
+    if (s == null) return ''
+    return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"')
   }
 }
