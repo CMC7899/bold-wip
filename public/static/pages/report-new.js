@@ -636,7 +636,7 @@ export class ReportNewPage {
             </label>
             <textarea id="r-remarks" rows="4"
               placeholder="Describe significant events, activity progress, materials on site…"
-              oninput="reportNewPage.data.remarks = this.value"
+              oninput="reportNewPage._step4Input('remarks', this.value)"
               class="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none mt-1">${this._escTA(d.remarks)}</textarea>
           </div>
           <div>
@@ -645,7 +645,7 @@ export class ReportNewPage {
             </label>
             <textarea id="r-planned" rows="3"
               placeholder="What is planned for the next working day…"
-              oninput="reportNewPage.data.plannedActivities = this.value"
+              oninput="reportNewPage._step4Input('plannedActivities', this.value)"
               class="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none mt-1">${this._escTA(d.plannedActivities)}</textarea>
           </div>
           <div>
@@ -654,7 +654,7 @@ export class ReportNewPage {
             </label>
             <textarea id="r-exceptions" rows="3"
               placeholder="Any delays, safety incidents, non-conformances…"
-              oninput="reportNewPage.data.exceptions = this.value"
+              oninput="reportNewPage._step4Input('exceptions', this.value)"
               class="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none mt-1">${this._escTA(d.exceptions)}</textarea>
           </div>
 
@@ -693,9 +693,16 @@ export class ReportNewPage {
   }
 
   _collectStep4() {
-    this.data.remarks          = document.getElementById('r-remarks')?.value    || ''
-    this.data.plannedActivities = document.getElementById('r-planned')?.value   || ''
-    this.data.exceptions       = document.getElementById('r-exceptions')?.value || ''
+    const remEl   = document.getElementById('r-remarks')
+    const planEl  = document.getElementById('r-planned')
+    const exclEl  = document.getElementById('r-exceptions')
+    if (remEl)  this.data.remarks           = remEl.value
+    if (planEl) this.data.plannedActivities = planEl.value
+    if (exclEl) this.data.exceptions        = exclEl.value
+  }
+
+  _step4Input(field, value) {
+    this.data[field] = value
   }
 
   async _handlePhotos(event) {
