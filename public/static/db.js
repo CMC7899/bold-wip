@@ -34,31 +34,33 @@ export const DB = {
           const phs = db.createObjectStore('photos', { keyPath: 'id' })
           phs.createIndex('reportId', 'reportId', { unique: false })
         }
-
+      }
+      req.onsuccess = (e) => {
+        this._db = e.target.result
+        resolve(this._db)
         // Migration: backfill remarks/plannedActivities/exceptions for existing reports
         if (!DB._migrated) {
           DB._migrated = true
           try {
-            const tx = e.target.transaction
-            const reportStore = tx.objectStore('dailyReports')
-            const allReq = reportStore.getAll()
+            const store = DB._db.transaction('dailyReports', 'readonly').objectStore('dailyReports')
+            const allReq = store.getAll()
             allReq.onsuccess = () => {
               const allReports = allReq.result || []
-              const migrateTx = db.transaction('dailyReports', 'readwrite')
+              if (!allReports.length) return
+              const migrateTx = DB._db.transaction('dailyReports', 'readwrite')
               const migrateStore = migrateTx.objectStore('dailyReports')
               for (const r of allReports) {
                 migrateStore.put({
                   ...r,
-                  remarks:          r.remarks          || '',
-                  plannedActivities: r.plannedActivities || '',
-                  exceptions:        r.exceptions        || '',
+                  remarks:           r.remarks           || '',
+                  plannedActivities: r.plannedActivities  || '',
+                  exceptions:        r.exceptions         || '',
                 })
               }
             }
           } catch { /* ignore migration errors */ }
         }
       }
-      req.onsuccess = (e) => { this._db = e.target.result; resolve(this._db) }
       req.onerror = () => reject(req.error)
     })
   },

@@ -149,25 +149,27 @@ export async function getDB(): Promise<IDBDatabase> {
       // Migration: backfill remarks/plannedActivities/exceptions for existing reports
       if (!_upgraded) {
         _upgraded = true
-        try {
-          const tx = (event.target as IDBOpenDBRequest).transaction
-          const reportStore = tx.objectStore('dailyReports')
-          const allReq = reportStore.getAll()
-          allReq.onsuccess = () => {
-            const allReports: DailyReport[] = allReq.result
-            const migrateTx = db.transaction('dailyReports', 'readwrite')
-            const migrateStore = migrateTx.objectStore('dailyReports')
-            for (const r of allReports) {
-              const updated = {
-                ...r,
-                remarks:          r.remarks          || '',
-                plannedActivities: r.plannedActivities || '',
-                exceptions:        r.exceptions        || '',
+        request.onsuccess = (ev) => {
+          const db2 = (ev.target as IDBOpenDBRequest).result
+          try {
+            const store = txStore(db2, 'dailyReports', 'readonly')
+            const allReq = store.getAll()
+            allReq.onsuccess = () => {
+              const allReports: DailyReport[] = allReq.result || []
+              if (!allReports.length) return
+              const migrateTx = db2.transaction('dailyReports', 'readwrite')
+              const migrateStore = migrateTx.objectStore('dailyReports')
+              for (const r of allReports) {
+                migrateStore.put({
+                  ...r,
+                  remarks:           r.remarks           || '',
+                  plannedActivities: r.plannedActivities  || '',
+                  exceptions:        r.exceptions         || '',
+                })
               }
-              migrateStore.put(updated)
             }
-          }
-        } catch { /* ignore migration errors */ }
+          } catch { /* ignore migration errors */ }
+        }
       }
     }
 
