@@ -104,9 +104,10 @@ export interface ReportPhoto {
 }
 
 const DB_NAME = 'BoltIndustriesDB'
-const DB_VERSION = 1
+const DB_VERSION = 2
 
 let dbInstance: IDBDatabase | null = null
+let _upgraded = false
 
 export async function getDB(): Promise<IDBDatabase> {
   if (dbInstance) return dbInstance
@@ -143,6 +144,30 @@ export async function getDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('photos')) {
         const photoStore = db.createObjectStore('photos', { keyPath: 'id' })
         photoStore.createIndex('reportId', 'reportId', { unique: false })
+      }
+
+      // Migration: backfill remarks/plannedActivities/exceptions for existing reports
+      if (!_upgraded) {
+        _upgraded = true
+        try {
+          const tx = (event.target as IDBOpenDBRequest).transaction
+          const reportStore = tx.objectStore('dailyReports')
+          const allReq = reportStore.getAll()
+          allReq.onsuccess = () => {
+            const allReports: DailyReport[] = allReq.result
+            const migrateTx = db.transaction('dailyReports', 'readwrite')
+            const migrateStore = migrateTx.objectStore('dailyReports')
+            for (const r of allReports) {
+              const updated = {
+                ...r,
+                remarks:          r.remarks          || '',
+                plannedActivities: r.plannedActivities || '',
+                exceptions:        r.exceptions        || '',
+              }
+              migrateStore.put(updated)
+            }
+          }
+        } catch { /* ignore migration errors */ }
       }
     }
 

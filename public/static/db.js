@@ -3,10 +3,11 @@
 // ============================================================
 
 const DB_NAME = 'BoltIndustriesDB'
-const DB_VERSION = 2
+const DB_VERSION = 3
 
 export const DB = {
   _db: null,
+  _migrated: false,
 
   async init() {
     if (this._db) return this._db
@@ -32,6 +33,29 @@ export const DB = {
         if (!db.objectStoreNames.contains('photos')) {
           const phs = db.createObjectStore('photos', { keyPath: 'id' })
           phs.createIndex('reportId', 'reportId', { unique: false })
+        }
+
+        // Migration: backfill remarks/plannedActivities/exceptions for existing reports
+        if (!DB._migrated) {
+          DB._migrated = true
+          try {
+            const tx = e.target.transaction
+            const reportStore = tx.objectStore('dailyReports')
+            const allReq = reportStore.getAll()
+            allReq.onsuccess = () => {
+              const allReports = allReq.result || []
+              const migrateTx = db.transaction('dailyReports', 'readwrite')
+              const migrateStore = migrateTx.objectStore('dailyReports')
+              for (const r of allReports) {
+                migrateStore.put({
+                  ...r,
+                  remarks:          r.remarks          || '',
+                  plannedActivities: r.plannedActivities || '',
+                  exceptions:        r.exceptions        || '',
+                })
+              }
+            }
+          } catch { /* ignore migration errors */ }
         }
       }
       req.onsuccess = (e) => { this._db = e.target.result; resolve(this._db) }
