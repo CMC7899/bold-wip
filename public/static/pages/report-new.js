@@ -636,6 +636,7 @@ export class ReportNewPage {
             </label>
             <textarea id="r-remarks" rows="4"
               placeholder="Describe significant events, activity progress, materials on site…"
+              oninput="reportNewPage.data.remarks = this.value"
               class="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none mt-1">${this._escTA(d.remarks)}</textarea>
           </div>
           <div>
@@ -644,6 +645,7 @@ export class ReportNewPage {
             </label>
             <textarea id="r-planned" rows="3"
               placeholder="What is planned for the next working day…"
+              oninput="reportNewPage.data.plannedActivities = this.value"
               class="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none mt-1">${this._escTA(d.plannedActivities)}</textarea>
           </div>
           <div>
@@ -652,6 +654,7 @@ export class ReportNewPage {
             </label>
             <textarea id="r-exceptions" rows="3"
               placeholder="Any delays, safety incidents, non-conformances…"
+              oninput="reportNewPage.data.exceptions = this.value"
               class="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none mt-1">${this._escTA(d.exceptions)}</textarea>
           </div>
 
