@@ -877,11 +877,13 @@ export class ReportNewPage {
   }
 
   _prev() {
+    if (this.step === 5) this._collectStep4()
     this.step--
     this._renderStep()
   }
 
   async _submit() {
+    this._collectStep4()
     const errors = []
     if (!this.data.preparedBy) errors.push('Prepared By is required')
     if (!this.data.reportDate) errors.push('Report date is required')
