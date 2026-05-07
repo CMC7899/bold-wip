@@ -261,29 +261,25 @@ export class ReportViewPage {
         </div>
 
         <!-- ── DETAILS RECORD ── -->
-        ${(r.remarks || r.plannedActivities || r.exceptions) ? `
         <div class="px-6 py-5 border-b border-gray-100">
           <h3 class="section-heading mb-4">
             <i class="fas fa-sticky-note mr-1 text-yellow-500"></i>Details Record
           </h3>
           <div class="space-y-3">
-            ${r.remarks ? `
             <div class="bg-yellow-50 border border-yellow-100 rounded-xl p-4">
               <div class="text-xs font-bold text-yellow-700 uppercase tracking-wide mb-1.5">Remarks / Site Observations</div>
-              <p class="text-sm text-gray-800 whitespace-pre-wrap">${this._esc(r.remarks)}</p>
-            </div>` : ''}
-            ${r.plannedActivities ? `
+              <p class="text-sm text-gray-800 whitespace-pre-wrap">${r.remarks ? this._esc(r.remarks) : '<span class="text-gray-400 italic">No remarks recorded</span>'}</p>
+            </div>
             <div class="bg-blue-50 border border-blue-100 rounded-xl p-4">
               <div class="text-xs font-bold text-blue-700 uppercase tracking-wide mb-1.5">Planned Activities (Tomorrow)</div>
-              <p class="text-sm text-gray-800 whitespace-pre-wrap">${this._esc(r.plannedActivities)}</p>
-            </div>` : ''}
-            ${r.exceptions ? `
+              <p class="text-sm text-gray-800 whitespace-pre-wrap">${r.plannedActivities ? this._esc(r.plannedActivities) : '<span class="text-gray-400 italic">No planned activities recorded</span>'}</p>
+            </div>
             <div class="bg-red-50 border border-red-100 rounded-xl p-4">
               <div class="text-xs font-bold text-red-700 uppercase tracking-wide mb-1.5">Exceptions / Issues</div>
-              <p class="text-sm text-gray-800 whitespace-pre-wrap">${this._esc(r.exceptions)}</p>
-            </div>` : ''}
+              <p class="text-sm text-gray-800 whitespace-pre-wrap">${r.exceptions ? this._esc(r.exceptions) : '<span class="text-gray-400 italic">No exceptions recorded</span>'}</p>
+            </div>
           </div>
-        </div>` : ''}
+        </div>
 
         <!-- ── SITE PHOTOS ── -->
         ${(r.photos?.length) ? `
@@ -674,8 +670,7 @@ export class ReportViewPage {
     }
 
     // ── DETAILS RECORD ────────────────────────────────
-    const hasDetails = r.remarks || r.plannedActivities || r.exceptions
-    if (hasDetails) {
+    {
       if (y > PH - 55) { doc.addPage(); y = M }
       doc.setFillColor(254, 252, 232)
       doc.rect(M, y, CW, 7, 'F')
@@ -684,11 +679,12 @@ export class ReportViewPage {
       y += 10
 
       const section = (label, text) => {
-        if (!text) return
+        if (y > PH - 20) { doc.addPage(); y = M }
         doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(...BRAND)
         doc.text(label, M, y); y += 4
-        doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(0,0,0)
-        const lines = doc.splitTextToSize(this._pdfText(text), CW)
+        const displayText = text || '–'
+        doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(80,80,80)
+        const lines = doc.splitTextToSize(this._pdfText(displayText), CW)
         lines.forEach(line => {
           if (y > PH - 20) { doc.addPage(); y = M }
           doc.text(line, M, y); y += 4.5

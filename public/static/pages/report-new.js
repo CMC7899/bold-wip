@@ -810,8 +810,18 @@ export class ReportNewPage {
 
         ${d.remarks ? `
         <div class="bg-yellow-50 border border-yellow-100 rounded-2xl p-4 mb-4">
-          <div class="text-xs font-semibold text-yellow-700 uppercase tracking-wide mb-1">Remarks</div>
+          <div class="text-xs font-semibold text-yellow-700 uppercase tracking-wide mb-1">Remarks / Site Observations</div>
           <p class="text-sm text-yellow-900 whitespace-pre-wrap">${this._esc(d.remarks)}</p>
+        </div>` : ''}
+        ${d.plannedActivities ? `
+        <div class="bg-blue-50 border border-blue-100 rounded-2xl p-4 mb-4">
+          <div class="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1">Planned Activities (Tomorrow)</div>
+          <p class="text-sm text-blue-900 whitespace-pre-wrap">${this._esc(d.plannedActivities)}</p>
+        </div>` : ''}
+        ${d.exceptions ? `
+        <div class="bg-red-50 border border-red-100 rounded-2xl p-4 mb-4">
+          <div class="text-xs font-semibold text-red-700 uppercase tracking-wide mb-1">Exceptions / Issues</div>
+          <p class="text-sm text-red-900 whitespace-pre-wrap">${this._esc(d.exceptions)}</p>
         </div>` : ''}
 
         ${this.photos.length ? `
