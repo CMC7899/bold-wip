@@ -211,6 +211,14 @@ export async function getReportsByProject(projectId: string): Promise<DailyRepor
   const store = txStore(db, 'dailyReports', 'readonly')
   const index = store.index('projectId')
   const results: DailyReport[] = await promisify(index.getAll(projectId))
+  return results.sort((a, b) => a.reportDate.localeCompare(b.reportDate))
+}
+
+export async function getReportsByProjectDesc(projectId: string): Promise<DailyReport[]> {
+  const db = await getDB()
+  const store = txStore(db, 'dailyReports', 'readonly')
+  const index = store.index('projectId')
+  const results: DailyReport[] = await promisify(index.getAll(projectId))
   return results.sort((a, b) => b.reportDate.localeCompare(a.reportDate))
 }
 
@@ -267,11 +275,13 @@ export function generateId(): string {
 }
 
 export async function generateReportNo(projectId: string, date: string): Promise<string> {
-  const reports = await getReportsByProject(projectId)
-  const datePart = date.replace(/-/g, '')
-  const sameDay = reports.filter(r => r.reportDate === date && !r.isDraft)
+  const db = await getDB()
+  const store = txStore(db, 'dailyReports', 'readonly')
+  const index = store.index('projectId')
+  const results: DailyReport[] = await promisify(index.getAll(projectId))
+  const sameDay = results.filter(r => r.reportDate === date && !r.isDraft)
   const seq = (sameDay.length + 1).toString().padStart(3, '0')
-  return `DR-${datePart}-${seq}`
+  return `DR-${date.replace(/-/g, '')}-${seq}`
 }
 
 // ─── Predefined Activities ────────────────────────────────────────────────────
@@ -311,15 +321,38 @@ export function getActivitiesForZoneType(zoneType: ZoneType): ActivityTemplate[]
 
 // ─── Compute project overall progress ─────────────────────────────────────────
 
+export interface CumulativeProgressMap {
+  [zoneConfigId: string]: {
+    [activityId: string]: number
+  }
+}
+
+export function computeCumulativeProgressMap(reports: DailyReport[]): CumulativeProgressMap {
+  const submitted = reports.filter(r => !r.isDraft)
+  const map: CumulativeProgressMap = {}
+  for (const r of submitted) {
+    for (const zp of (r.zoneProgress || [])) {
+      if (!map[zp.zoneConfigId]) map[zp.zoneConfigId] = {}
+      for (const act of (zp.activities || [])) {
+        const key = act.activityId
+        const pct = act.percentComplete || 0
+        if (!map[zp.zoneConfigId][key] || pct > map[zp.zoneConfigId][key]) {
+          map[zp.zoneConfigId][key] = pct
+        }
+      }
+    }
+  }
+  return map
+}
+
 export async function computeProjectProgress(projectId: string): Promise<number> {
   const reports = await getReportsByProject(projectId)
   if (reports.length === 0) return 0
-  const latest = reports[0] // sorted desc
+  const cumulative = computeCumulativeProgressMap(reports)
   let total = 0, count = 0
-  for (const zp of latest.zoneProgress) {
-    for (const ap of zp.activities) {
-      total += ap.percentComplete
-      count++
+  for (const zoneActs of Object.values(cumulative)) {
+    for (const pct of Object.values(zoneActs)) {
+      total += pct; count++
     }
   }
   return count === 0 ? 0 : Math.round(total / count)

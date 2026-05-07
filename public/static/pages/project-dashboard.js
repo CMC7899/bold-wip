@@ -2,7 +2,7 @@
 // PROJECT DASHBOARD PAGE
 // ============================================================
 import { DB, formatDate, formatDateLong, statusColor, statusLabel,
-         computeProjectProgress, progressColor, weatherEmoji, isMsConfigured, todayISO } from '../db.js'
+         computeProjectProgress, computeCumulativeProgressMap, progressColor, weatherEmoji, isMsConfigured, todayISO } from '../db.js'
 import { msSync } from '../msproject.js'
 
 export class ProjectDashboardPage {
@@ -38,7 +38,7 @@ export class ProjectDashboardPage {
       return
     }
 
-    this.reports = await DB.getReportsByProject(this.projectId)
+    this.reports = await DB.getReportsByProjectDesc(this.projectId)
     const pct    = await computeProjectProgress(this.projectId)
     window.projectDashboardPage = this
 
@@ -202,16 +202,15 @@ export class ProjectDashboardPage {
     if (!(this.project.zones || []).length) {
       return `<p class="text-gray-400 text-sm text-center py-6">No zones configured</p>`
     }
-    const progressMap = {}
-    if (this.reports.length) {
-      for (const zp of (this.reports[0].zoneProgress || [])) {
-        progressMap[zp.zoneConfigId] = zp.activities || []
-      }
-    }
+    const cumulative = computeCumulativeProgressMap(this.reports)
     return `
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         ${this.project.zones.map(zone => {
-          const acts = progressMap[zone.id] || (zone.activities || []).map(a => ({ ...a, percentComplete: 0 }))
+          const zoneCumulative = cumulative[zone.id] || {}
+          const acts = (zone.activities || []).map(a => ({
+            ...a,
+            percentComplete: zoneCumulative[a.id] || 0,
+          }))
           const avg  = acts.length ? Math.round(acts.reduce((s, a) => s + (a.percentComplete || 0), 0) / acts.length) : 0
           const col  = progressColor(avg)
           const isBIPV = zone.zoneType === 'BIPV'

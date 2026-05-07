@@ -579,7 +579,7 @@ export class ReportViewPage {
       doc.setFontSize(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(...BRAND)
       doc.text(label, x, yy)
       doc.setFont('helvetica', 'normal'); doc.setTextColor(0,0,0); doc.setFontSize(8)
-      doc.text(String(val || '–').substring(0,50), x + (label.length * 1.7), yy)
+      doc.text(this._pdfText(val || '–').substring(0, 50), x + (label.length * 1.7), yy)
     }
 
     infoLeft('PROJECT:', p?.name || '–', M + 2, y + 6)
@@ -609,7 +609,7 @@ export class ReportViewPage {
       doc.autoTable({
         startY: y,
         head:   [['👷  Manpower / Role', 'Quantity']],
-        body:   mpRows.map(m => [m.roleName || '–', m.quantity]),
+        body:   mpRows.map(m => [this._pdfText(m.roleName) || '–', m.quantity]),
         foot:   [['Total Manpower', mpRows.reduce((s,m)=>s+(m.quantity||0),0)]],
         styles:      { fontSize: 8, cellPadding: 3 },
         headStyles:  { fillColor: [37,99,235], textColor: 255, fontStyle: 'bold', fontSize: 7 },
@@ -626,7 +626,7 @@ export class ReportViewPage {
       doc.autoTable({
         startY: y,
         head:   [['🔧  Machinery / Equipment', 'Quantity']],
-        body:   mcRows.map(m => [m.equipmentName || '–', m.quantity]),
+        body:   mcRows.map(m => [this._pdfText(m.equipmentName) || '–', m.quantity]),
         foot:   [['Total Equipment Types', mcRows.length]],
         styles:      { fontSize: 8, cellPadding: 3 },
         headStyles:  { fillColor: [217,119,6], textColor: 255, fontStyle: 'bold', fontSize: 7 },
@@ -646,13 +646,13 @@ export class ReportViewPage {
         const acts = zp.activities || []
         const avg  = acts.length
           ? Math.round(acts.reduce((s,a)=>s+(a.percentComplete||0),0)/acts.length) : 0
-        rows.push([{ content: zp.zoneCode || '–', styles: { fontStyle:'bold' } },
+        rows.push([{ content: this._pdfText(zp.zoneCode) || '–', styles: { fontStyle:'bold' } },
                    { content: 'Zone Average', styles: { fontStyle:'italic', textColor:[100,100,100] } },
                    { content: avg + '%', styles: { fontStyle:'bold',
                        textColor: avg>=80?[16,185,129]:avg>=50?[59,130,246]:avg>=20?[245,158,11]:[239,68,68] }}])
         for (const a of acts) {
           const pct = a.percentComplete || 0
-          rows.push(['', a.activityName || '–',
+          rows.push(['', this._pdfText(a.activityName) || '–',
             { content: pct + '%', styles: {
                 textColor: pct>=80?[16,185,129]:pct>=50?[59,130,246]:pct>=20?[245,158,11]:[239,68,68],
                 fontStyle: 'bold'
@@ -688,7 +688,7 @@ export class ReportViewPage {
         doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(...BRAND)
         doc.text(label, M, y); y += 4
         doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(0,0,0)
-        const lines = doc.splitTextToSize(text, CW)
+        const lines = doc.splitTextToSize(this._pdfText(text), CW)
         lines.forEach(line => {
           if (y > PH - 20) { doc.addPage(); y = M }
           doc.text(line, M, y); y += 4.5
@@ -724,7 +724,7 @@ export class ReportViewPage {
         if (py + CELL_H > PH - 20) { doc.addPage(); px = M; py = M; col = 0 }
 
         const ph   = r.photos[i]
-        const desc = (ph.caption || ph.description || '').trim()
+        const desc = this._pdfText((ph.caption || ph.description || '').trim())
 
         try {
           doc.addImage(ph.dataUrl, 'JPEG', px, py, PW_PHOTO, PH_PHOTO, '', 'MEDIUM')
@@ -785,6 +785,16 @@ export class ReportViewPage {
   }
 
   // ── Helpers ───────────────────────────────────────────────
+// Sanitize text for jsPDF – replaces non-Latin / unsupported chars with safe equivalents
+  _pdfText(t) {
+    if (t == null) return ''
+    return String(t)
+      .replace(/[\u2018\u2019]/g, "'")   // smart single quotes → ASCII apostrophe
+      .replace(/[\u201C\u201D]/g, '"')   // smart double quotes → ASCII quotes
+      .replace(/[\u2013\u2014]/g, '-')    // en/em dashes → ASCII dash
+      .replace(/[^\x00-\x7F]/g, '?')     // any remaining non-ASCII → ?
+  }
+
   _esc(s) {
     if (s == null) return ''
     return String(s)

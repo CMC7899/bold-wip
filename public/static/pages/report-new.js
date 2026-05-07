@@ -4,7 +4,7 @@
 // Auto-saves draft to IndexedDB
 // ============================================================
 import { DB, genId, genReportNo, todayISO, getActivities, formatDate,
-         isMsConfigured, genMockGuid, progressColor } from '../db.js'
+         isMsConfigured, genMockGuid, progressColor, getLastReportProgress } from '../db.js'
 
 const WEATHER_OPTIONS = ['Sunny', 'Rainy', 'Cloudy', 'Windy', 'Fog']
 const WEATHER_EMOJI   = { Sunny: '☀️', Rainy: '🌧️', Cloudy: '⛅', Windy: '💨', Fog: '🌫️' }
@@ -54,6 +54,7 @@ export class ReportNewPage {
       </button>`)
 
     // Restore draft from localStorage (works offline)
+    // Note: zoneProgress is excluded from draft restore since it always comes from the last submitted report
     this._tryRestoreDraft()
 
     // Load project
@@ -66,17 +67,25 @@ export class ReportNewPage {
       return
     }
 
-    // Init zone progress from project zones
-    if (!this.data.zoneProgress?.length) {
-      this.data.zoneProgress = (this.project.zones || []).map(z => ({
+    // Compute the pre-fill zone progress from the last submitted report
+    const prevReports = await DB.getReportsByProject(this.projectId)
+    const lastZp = getLastReportProgress(prevReports)
+    const prefillZoneProgress = (this.project.zones || []).map(z => {
+      const lastZone = lastZp?.find(lz => lz.zoneConfigId === z.id)
+      return {
         zoneConfigId: z.id,
         zoneCode:     z.zoneCode,
         activities:   (z.activities || []).map(a => ({
           activityId:      a.id,
           activityName:    a.name || a.activityName || '',
-          percentComplete: 0,
+          percentComplete: lastZone?.activities?.find(la => la.activityId === a.id)?.percentComplete || 0,
         })),
-      }))
+      }
+    })
+
+    // Pre-fill zoneProgress if not already set (e.g. from draft restore)
+    if (!this.data.zoneProgress?.length) {
+      this.data.zoneProgress = prefillZoneProgress
     }
 
     // Init manpower / machinery
@@ -131,9 +140,12 @@ export class ReportNewPage {
       const saved = JSON.parse(raw)
       if (saved && saved.projectId === this.projectId) {
         if (confirm('You have an unsaved draft. Restore it?')) {
-          const { id, reportNo, ...rest } = saved
-          Object.assign(this.data, rest)
-          // restore photos separately
+          const { id, reportNo, zoneProgress: draftZp, ...rest } = saved
+          // Preserve pre-filled zoneProgress from last report; only restore if draft has it
+          const mergedZp = (draftZp && draftZp.length)
+            ? draftZp
+            : this.data.zoneProgress
+          Object.assign(this.data, rest, { zoneProgress: mergedZp })
           if (Array.isArray(saved._photos)) this.photos = saved._photos
         }
       }

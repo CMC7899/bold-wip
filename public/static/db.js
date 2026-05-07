@@ -62,6 +62,11 @@ export const DB = {
   async getAllReports()     { return this._p(this._store('dailyReports').getAll()) },
   async getReportsByProject(pid) {
     const all = await this._p(this._store('dailyReports').index('projectId').getAll(pid))
+    return all.sort((a, b) => a.reportDate.localeCompare(b.reportDate))
+  },
+
+  async getReportsByProjectDesc(pid) {
+    const all = await this._p(this._store('dailyReports').index('projectId').getAll(pid))
     return all.sort((a, b) => b.reportDate.localeCompare(a.reportDate))
   },
   async deleteReport(id)   { return this._p(this._store('dailyReports','readwrite').delete(id)) },
@@ -116,11 +121,10 @@ export function mockSyncMeta() {
 // ── Report number ─────────────────────────────────────────────────────────────
 
 export async function genReportNo(projectId, date) {
-  const reports = await DB.getReportsByProject(projectId)
-  const datePart = date.replace(/-/g, '')
-  const sameDay  = reports.filter(r => r.reportDate === date && !r.isDraft)
-  const seq      = String(sameDay.length + 1).padStart(3, '0')
-  return `DR-${datePart}-${seq}`
+  const all = await DB._p(DB._store('dailyReports').index('projectId').getAll(projectId))
+  const sameDay = all.filter(r => r.reportDate === date && !r.isDraft)
+  const seq = String(sameDay.length + 1).padStart(3, '0')
+  return `DR-${date.replace(/-/g, '')}-${seq}`
 }
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -184,14 +188,46 @@ export function progressColor(pct) {
 export async function computeProjectProgress(projectId) {
   const reports = await DB.getReportsByProject(projectId)
   if (!reports.length) return 0
-  const latest = reports[0]
+  const cumulative = computeCumulativeProgressMap(reports)
   let total = 0, count = 0
-  for (const zp of (latest.zoneProgress || [])) {
-    for (const ap of (zp.activities || [])) {
-      total += (ap.percentComplete || 0); count++
+  for (const zoneActs of Object.values(cumulative)) {
+    for (const pct of Object.values(zoneActs)) {
+      total += pct; count++
     }
   }
   return count ? Math.round(total / count) : 0
+}
+
+/**
+ * Returns cumulative progress per activity across all submitted reports.
+ * Keyed by zoneConfigId -> activityId -> percentComplete (max across reports).
+ */
+export function computeCumulativeProgressMap(reports) {
+  const submitted = reports.filter(r => !r.isDraft)
+  const map = {} // zoneConfigId -> activityId -> maxPercent
+  for (const r of submitted) {
+    for (const zp of (r.zoneProgress || [])) {
+      if (!map[zp.zoneConfigId]) map[zp.zoneConfigId] = {}
+      for (const act of (zp.activities || [])) {
+        const key = act.activityId || act.id
+        const pct = act.percentComplete || 0
+        if (!map[zp.zoneConfigId][key] || pct > map[zp.zoneConfigId][key]) {
+          map[zp.zoneConfigId][key] = pct
+        }
+      }
+    }
+  }
+  return map
+}
+
+/**
+ * Returns the zone progress from the most recent submitted (non-draft) report.
+ * Used to pre-fill new report forms with the latest values.
+ */
+export function getLastReportProgress(reports) {
+  const submitted = reports.filter(r => !r.isDraft && r.zoneProgress?.length)
+  if (!submitted.length) return null
+  return submitted[submitted.length - 1].zoneProgress || null
 }
 
 // ── Predefined activity lists ─────────────────────────────────────────────────
